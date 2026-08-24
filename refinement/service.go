@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/google/uuid"
 )
@@ -66,7 +66,7 @@ type ServiceInterface interface {
 }
 
 type service struct {
-	logger             kitlog.Logger
+	logger             stroplog.Logger
 	rejectedStatus     string
 	pendingStatus      string
 	maxHealingAttempts int
@@ -74,7 +74,7 @@ type service struct {
 
 // NewService creates a refinement service (versioning + stopping + self-healing).
 // rejectedStatus and pendingStatus are pipeline-specific strings (e.g. "rejected", "pending").
-func NewService(logger kitlog.Logger, rejectedStatus, pendingStatus string, maxHealingAttempts int) ServiceInterface {
+func NewService(logger stroplog.Logger, rejectedStatus, pendingStatus string, maxHealingAttempts int) ServiceInterface {
 	if logger == nil {
 		panic("logger cannot be nil")
 	}

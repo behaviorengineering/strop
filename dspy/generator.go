@@ -61,7 +61,7 @@ func (c GeneratorConfig) CreateModule() (core.Module, error) {
 }
 
 // CreateGeneratorModule creates a DirectivesCoT generator (Predict + directives_ack; no stock CoT rationale).
-// Shared entry point for all pipelines; lives in the kit so apps and product clients can import it.
+// Shared entry point for all pipelines; lives in strop so apps and product clients can import it.
 
 // Render order: persona (if non-empty, at top) + systemPrompt + globalRules + criterion guidance; then WithXMLFormatting; then humanInstructionsFn when non-nil.
 func CreateGeneratorModule(

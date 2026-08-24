@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -346,7 +346,7 @@ func TestExtractContentVersion(t *testing.T) {
 
 // This is critical because wrong serialization breaks observability in Arize.
 func TestBuildInputOutputAttributes(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 
 	tests := []struct {
 		name           string
@@ -468,7 +468,7 @@ func TestBuildInputOutputAttributes(t *testing.T) {
 
 // The XML interceptor has already parsed XML into structured fields at the top level.
 func TestBuildInputOutputAttributes_WithXML(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 
 	moduleInfo := &OpenInferenceModuleInfo{
 		Name: "TestModule",
@@ -508,7 +508,7 @@ func TestBuildInputOutputAttributes_WithXML(t *testing.T) {
 }
 
 func TestBuildInputOutputAttributes_KeepsRawOnError(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 	raw := `<response><broken`
 
 	moduleInfo := &OpenInferenceModuleInfo{
@@ -536,7 +536,7 @@ func TestBuildInputOutputAttributes_KeepsRawOnError(t *testing.T) {
 }
 
 func TestBuildInputOutputAttributes_KeepsRawWhenOnlyRawPresent(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 	raw := "unparseable model text"
 
 	moduleInfo := &OpenInferenceModuleInfo{
@@ -564,7 +564,7 @@ func TestBuildInputOutputAttributes_KeepsRawWhenOnlyRawPresent(t *testing.T) {
 
 // This is critical because wrong attributes break cost tracking in Arize.
 func TestBuildLLMAttributes(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 
 	tests := []struct {
 		name          string
@@ -748,7 +748,7 @@ func TestBuildLLMAttributes_WithNilLogger(t *testing.T) {
 
 // TestAddOpenInferenceAttributes_NilSpan tests critical error handling.
 func TestAddOpenInferenceAttributes_NilSpan(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 	moduleInfo := &OpenInferenceModuleInfo{
 		Name: "TestModule",
 	}
@@ -761,7 +761,7 @@ func TestAddOpenInferenceAttributes_NilSpan(t *testing.T) {
 
 // TestAddOpenInferenceAttributes_Integration tests the full attribute building pipeline.
 func TestAddOpenInferenceAttributes_Integration(t *testing.T) {
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 	tracer := noop.NewTracerProvider().Tracer("test")
 	ctx := context.Background()
 	_, span := tracer.Start(ctx, "test-span")

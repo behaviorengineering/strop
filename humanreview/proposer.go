@@ -38,7 +38,7 @@ type ScoreProposalInputs struct {
 	Alignment            *AlignmentFeedback
 }
 
-// ScoreProposer proposes a criterion score. Apps inject a DSPy adapter; the kit does not import DSPy.
+// ScoreProposer proposes a criterion score. Apps inject a DSPy adapter; strop does not import DSPy.
 type ScoreProposer interface {
 	Propose(ctx context.Context, in ScoreProposalInputs) (*ScoreProposal, error)
 }

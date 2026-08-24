@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 )
 
 type stubEvaluationInput struct {
@@ -35,7 +35,7 @@ func TestBuildEvaluationInputs_usesEvaluationMapAndVersion(t *testing.T) {
 
 	got := buildEvaluationInputs(in, out)
 
-	require.Equal(t, in.eval, got[kitdspy.FieldGeneratorInput])
-	require.Equal(t, out, got[kitdspy.FieldGeneratorOutput])
-	assert.Equal(t, 2, got[kitdspy.FieldIterationVersion], "iterationVersion comes from GetVersion, not the inner map")
+	require.Equal(t, in.eval, got[stropdspy.FieldGeneratorInput])
+	require.Equal(t, out, got[stropdspy.FieldGeneratorOutput])
+	assert.Equal(t, 2, got[stropdspy.FieldIterationVersion], "iterationVersion comes from GetVersion, not the inner map")
 }

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
 	"github.com/behaviorengineering/strop/dspy/registry"
 	"github.com/behaviorengineering/strop/dspy/tracing"
 	"github.com/behaviorengineering/strop/evaluation"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 	"github.com/behaviorengineering/strop/streaming"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
@@ -70,9 +70,9 @@ type EvaluationInput interface {
 // Inner generator_input / generator_output keys stay job-specific.
 func buildEvaluationInputs(generatorInput EvaluationInput, generatorOutput map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
-		kitdspy.FieldGeneratorInput:   generatorInput.EvaluationMap(),
-		kitdspy.FieldGeneratorOutput:  generatorOutput,
-		kitdspy.FieldIterationVersion: generatorInput.GetVersion(),
+		stropdspy.FieldGeneratorInput:   generatorInput.EvaluationMap(),
+		stropdspy.FieldGeneratorOutput:  generatorOutput,
+		stropdspy.FieldIterationVersion: generatorInput.GetVersion(),
 	}
 }
 
@@ -91,7 +91,7 @@ type JobRunner struct {
 	registry         *registry.ModuleRegistry
 	learningService  LearningServiceForGeneration
 	exampleFormatter ExampleFormatter
-	logger           kitlog.Logger
+	logger           stroplog.Logger
 }
 
 // NewJobRunner creates a runner for generation and evaluation.
@@ -99,7 +99,7 @@ func NewJobRunner(
 	reg *registry.ModuleRegistry,
 	learningService LearningServiceForGeneration,
 	exampleFormatter ExampleFormatter,
-	logger kitlog.Logger,
+	logger stroplog.Logger,
 ) *JobRunner {
 	if reg == nil {
 		panic("registry cannot be nil")
@@ -147,7 +147,7 @@ func (r *JobRunner) GenerateResult(
 		)
 	}
 	inputs := input.ToMap()
-	inputs[kitdspy.FieldIterationVersion] = input.GetVersion()
+	inputs[stropdspy.FieldIterationVersion] = input.GetVersion()
 
 	if eventChan != nil {
 		ctx = streaming.ContextWithEventChannel(ctx, eventChan)
@@ -171,17 +171,17 @@ func (r *JobRunner) GenerateResult(
 	if eventChan != nil {
 		opts = append(opts, core.WithStreamHandler(gen.StreamHandler(eventChan)))
 	}
-	outputs, err := kitdspy.RunModule(ctx, gen.Module, inputs, beforeProcess, opts...)
+	outputs, err := stropdspy.RunModule(ctx, gen.Module, inputs, beforeProcess, opts...)
 	// Normalize array fields that may be returned as JSON strings (quotes, topics) so display shows a list.
 	if outputs != nil {
-		kitdspy.NormalizeOutputArrayFields(outputs, []string{"quotes", "topics"})
+		stropdspy.NormalizeOutputArrayFields(outputs, []string{"quotes", "topics"})
 	}
 	if eventChan != nil {
 		eventChan <- gen.EndEvent(outputs, err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("Failed to generate %s", config.ErrorMessage),
-			kitdspy.SanitizeDSPyError(err),
+			stropdspy.SanitizeDSPyError(err),
 		)
 	}
 	return &GenerationResult{Outputs: outputs, Demos: demos}, nil
@@ -205,7 +205,7 @@ func (r *JobRunner) EvaluateWorkflow(
 	}
 	result, err := workflow.EvaluateStream(ctx, inputs, eventChan)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("Failed to evaluate %s", job), kitdspy.SanitizeDSPyError(err))
+		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("Failed to evaluate %s", job), stropdspy.SanitizeDSPyError(err))
 	}
 	return result, nil
 }
@@ -291,14 +291,14 @@ func ParseArtifactInput(inputRaw interface{}) (map[string]interface{}, error) {
 		return m, nil
 	}
 	if s, ok := inputRaw.(string); ok {
-		return map[string]interface{}{kitdspy.FieldOriginalText: s}, nil
+		return map[string]interface{}{stropdspy.FieldOriginalText: s}, nil
 	}
 	return nil, fmt.Errorf("input must be map or string, got %T", inputRaw)
 }
 
 // ExtractOriginalText returns original_text from an input map.
 func ExtractOriginalText(inputMap map[string]interface{}) (string, error) {
-	v, ok := inputMap[kitdspy.FieldOriginalText]
+	v, ok := inputMap[stropdspy.FieldOriginalText]
 	if !ok {
 		return "", fmt.Errorf("original_text is required in input")
 	}
@@ -321,7 +321,7 @@ func GetStringFromMap(m map[string]interface{}, key string) string {
 
 // ExtractRequiredField extracts a required string field and wraps failure with a domain error.
 func ExtractRequiredField(outputs map[string]interface{}, fieldName, errorCode string) (string, error) {
-	v, err := kitdspy.ExtractRequiredStringField(outputs, fieldName)
+	v, err := stropdspy.ExtractRequiredStringField(outputs, fieldName)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", fmt.Sprintf("module returned empty or invalid field %q", fieldName), err)
 	}
@@ -330,7 +330,7 @@ func ExtractRequiredField(outputs map[string]interface{}, fieldName, errorCode s
 
 // ExtractRequiredReasoning extracts directives_ack and wraps failure with a domain error.
 func ExtractRequiredReasoning(outputs map[string]interface{}, errorCode string) (string, error) {
-	v, err := kitdspy.ExtractRequiredReasoningField(outputs)
+	v, err := stropdspy.ExtractRequiredReasoningField(outputs)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", "module returned empty or invalid directives_ack", err)
 	}
@@ -352,12 +352,12 @@ func JobStepKey(job, step string) string {
 // It implements ExampleFormatter; formatters are injected by the caller (IoC).
 type CompositeExampleFormatter struct {
 	formatters map[string]JobExampleFormatter
-	logger     kitlog.Logger
+	logger     stroplog.Logger
 }
 
 // NewCompositeExampleFormatter creates a composite that uses the injected formatters map.
 // The caller builds the map from JobStepKey(job, step) to formatter. logger may be nil.
-func NewCompositeExampleFormatter(logger kitlog.Logger, formatters map[string]JobExampleFormatter) *CompositeExampleFormatter {
+func NewCompositeExampleFormatter(logger stroplog.Logger, formatters map[string]JobExampleFormatter) *CompositeExampleFormatter {
 	m := make(map[string]JobExampleFormatter, len(formatters))
 	for k, v := range formatters {
 		m[k] = v

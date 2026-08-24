@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/behaviorengineering/strop/dspy/rawresponse"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"go.opentelemetry.io/otel"
@@ -33,7 +33,7 @@ const (
 // serviceName is the service name used for OpenTelemetry tracer (should match the service name used in InitOTEL).
 // providerLookup is a function that maps model IDs to provider names (e.g., "openai", "anthropic", "google").
 // modelIDByModuleName is an optional fallback that maps module display name to model ID when ExecutionState does not contain it.
-func OpenInferenceModuleInterceptor(enabled bool, serviceName string, logger kitlog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor {
+func OpenInferenceModuleInterceptor(enabled bool, serviceName string, logger stroplog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor {
 	if !enabled {
 		// Return a no-op interceptor if disabled.
 		return func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo, handler core.ModuleHandler, opts ...core.Option) (map[string]any, error) {
@@ -281,7 +281,7 @@ type handleResultParams struct {
 	err                 error
 	dspySpan            *core.Span
 	otelSpan            trace.Span
-	logger              kitlog.Logger
+	logger              stroplog.Logger
 	moduleName          string
 	moduleType          string
 	inputs              map[string]any
@@ -332,7 +332,7 @@ func handleResult(params handleResultParams) (map[string]any, error) {
 
 // extractModuleInfo extracts information from execution context for OpenInference export.
 // providerLookup maps model IDs to provider names. modelIDByModuleName is an optional fallback when ExecutionState has no model ID.
-func extractModuleInfo(ctx context.Context, moduleName, moduleType string, inputs, outputs map[string]any, execErr error, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string, logger kitlog.Logger) *OpenInferenceModuleInfo {
+func extractModuleInfo(ctx context.Context, moduleName, moduleType string, inputs, outputs map[string]any, execErr error, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string, logger stroplog.Logger) *OpenInferenceModuleInfo {
 	moduleInfo := &OpenInferenceModuleInfo{
 		Name:    moduleName,
 		Type:    moduleType,

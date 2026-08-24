@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/llms"
@@ -18,7 +18,7 @@ import (
 type LLMFactory struct {
 	// This is used by OpenInference interceptor to look up provider names.
 	onModelCreated func(modelID string, providerType string)
-	logger         kitlog.Logger
+	logger         stroplog.Logger
 	moduleTimeout  time.Duration // Default timeout for HTTP clients (defaults to module timeout if provider.Timeout not set).
 	instrumentHTTP func(*http.Client)
 }
@@ -32,7 +32,7 @@ func NewLLMFactory(onModelCreated func(modelID string, providerType string), mod
 }
 
 // SetLogger sets the logger for the LLM factory (optional, for debugging).
-func (f *LLMFactory) SetLogger(logger kitlog.Logger) {
+func (f *LLMFactory) SetLogger(logger stroplog.Logger) {
 	f.logger = logger
 }
 
@@ -45,7 +45,7 @@ func (f *LLMFactory) SetInstrumentHTTP(fn func(*http.Client)) {
 }
 
 // CreateLLM configures and returns an LLM instance based on the provider configuration.
-func (f *LLMFactory) CreateLLM(ctx context.Context, provider kitdspy.ProviderConfig) (core.LLM, error) {
+func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderConfig) (core.LLM, error) {
 	// Configure default LLM.
 	llms.EnsureFactory()
 
@@ -215,11 +215,11 @@ func isPolypusBaseURL(baseURL string) bool {
 type loggingModelContextDecorator struct {
 	core.LLM
 	expectedModelID string
-	logger          kitlog.Logger
+	logger          stroplog.Logger
 }
 
 // newLoggingModelContextDecorator creates a logging wrapper around ModelContextDecorator.
-func newLoggingModelContextDecorator(decorated core.LLM, expectedModelID string, logger kitlog.Logger) core.LLM {
+func newLoggingModelContextDecorator(decorated core.LLM, expectedModelID string, logger stroplog.Logger) core.LLM {
 	return &loggingModelContextDecorator{
 		LLM:             decorated,
 		expectedModelID: expectedModelID,

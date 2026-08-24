@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Store persists HumanEvaluation rows. Implementations must not require a kit-level transaction type.
+// Store persists HumanEvaluation rows. Implementations must not require a strop-level transaction type.
 // GetByID and GetByRootEntityID return (nil, nil) when the row is missing.
 type Store interface {
 	Create(ctx context.Context, evaluation *HumanEvaluation) error

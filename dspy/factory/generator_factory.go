@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
-	kitvalidation "github.com/behaviorengineering/strop/dspy/validation"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
+	stropvalidation "github.com/behaviorengineering/strop/dspy/validation"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -33,10 +33,10 @@ func NewGeneratorFactory(configurator *ModuleConfigurator) *GeneratorFactory {
 // moduleFactory is a function that creates a generator module (DirectivesCoT).
 func (f *GeneratorFactory) CreateGenerator(
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	moduleFactory func() (core.Module, error),
 	errorPrefix string,
-	validator func(kitdspy.ProviderConfig) kitvalidation.InputProcessor, // Optional
+	validator func(stropdspy.ProviderConfig) stropvalidation.InputProcessor, // Optional
 ) (core.Module, error) {
 	// Create module using factory function.
 	module, err := moduleFactory()

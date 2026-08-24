@@ -3,9 +3,9 @@ package factory
 import (
 	"context"
 	"fmt"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
@@ -16,14 +16,14 @@ import (
 type ModuleConfigurator struct {
 	llmFactory       *LLMFactory
 	interceptorSetup *InterceptorSetup
-	logger           kitlog.Logger
+	logger           stroplog.Logger
 }
 
 // NewModuleConfigurator creates a new module configurator.
 func NewModuleConfigurator(
 	llmFactory *LLMFactory,
 	interceptorSetup *InterceptorSetup,
-	logger kitlog.Logger,
+	logger stroplog.Logger,
 ) *ModuleConfigurator {
 	if llmFactory == nil {
 		panic("llmFactory cannot be nil")
@@ -42,7 +42,7 @@ func NewModuleConfigurator(
 // Accepts DirectivesCoT or bare Predict.
 func (c *ModuleConfigurator) SetupModule(
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	module core.Module,
 	errorPrefix string,
 ) error {
@@ -113,7 +113,7 @@ func (c *ModuleConfigurator) SetupModule(
 // Chained modules contain two internal modules (e.g., feedback analysis + score generation).
 func (c *ModuleConfigurator) SetupChainedModule(
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	chainedModule core.Module,
 	errorPrefix string,
 ) error {

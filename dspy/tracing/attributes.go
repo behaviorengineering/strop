@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/behaviorengineering/strop/dspy/rawresponse"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"go.opentelemetry.io/otel/attribute"
@@ -14,7 +14,7 @@ import (
 
 // addOpenInferenceAttributes adds OpenInference-specific attributes to an OpenTelemetry span.
 // This formats the module execution information according to OpenInference conventions.
-func addOpenInferenceAttributes(otelSpan trace.Span, moduleInfo *OpenInferenceModuleInfo, logger kitlog.Logger, info *core.ModuleInfo, inputs map[string]any) error {
+func addOpenInferenceAttributes(otelSpan trace.Span, moduleInfo *OpenInferenceModuleInfo, logger stroplog.Logger, info *core.ModuleInfo, inputs map[string]any) error {
 	if otelSpan == nil {
 		return fmt.Errorf("OpenTelemetry span is nil")
 	}
@@ -50,7 +50,7 @@ func buildModuleAttributes(moduleInfo *OpenInferenceModuleInfo) []attribute.KeyV
 //
 // On success, structured outputs are exported and __raw_response is stripped.
 // On error (or when only raw text exists), __raw_response is kept so Phoenix shows Output.
-func buildInputOutputAttributes(moduleInfo *OpenInferenceModuleInfo, logger kitlog.Logger) []attribute.KeyValue {
+func buildInputOutputAttributes(moduleInfo *OpenInferenceModuleInfo, logger stroplog.Logger) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 
 	// Serialize inputs to JSON for input.value.
@@ -119,7 +119,7 @@ func buildInputOutputAttributes(moduleInfo *OpenInferenceModuleInfo, logger kitl
 // See: https://arize.com/docs/phoenix/tracing/how-to-tracing/add-metadata/instrumenting-prompt-templates-and-prompt-variables
 // Note: We don't include llm.prompt_template.variables here because input.value already contains all input data,
 // making template variables redundant.
-func buildPromptTemplateAttributes(info *core.ModuleInfo, inputs map[string]any, logger kitlog.Logger) []attribute.KeyValue {
+func buildPromptTemplateAttributes(info *core.ModuleInfo, inputs map[string]any, logger stroplog.Logger) []attribute.KeyValue {
 	if info == nil || info.Signature.Instruction == "" {
 		return nil
 	}
@@ -141,7 +141,7 @@ func buildPromptTemplateAttributes(info *core.ModuleInfo, inputs map[string]any,
 
 // buildLLMAttributes builds LLM-specific attributes for cost tracking (required by Arize).
 // See: https://arize.com/docs/phoenix/tracing/how-to-tracing/cost-tracking#span-level-costs
-func buildLLMAttributes(moduleInfo *OpenInferenceModuleInfo, logger kitlog.Logger) []attribute.KeyValue {
+func buildLLMAttributes(moduleInfo *OpenInferenceModuleInfo, logger stroplog.Logger) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 
 	// Set to "unknown" if not found (Arize will handle missing values).

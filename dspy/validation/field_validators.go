@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -20,8 +20,8 @@ import (
 //
 //	validator := FieldTokenValidator("saying_context")(provider)
 //	err := validator(ctx, inputs, info)
-func FieldTokenValidator(fieldName string) func(kitdspy.ProviderConfig) InputProcessor {
-	return func(provider kitdspy.ProviderConfig) InputProcessor {
+func FieldTokenValidator(fieldName string) func(stropdspy.ProviderConfig) InputProcessor {
+	return func(provider stropdspy.ProviderConfig) InputProcessor {
 		return func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo) error {
 			// Get field by name (configurable!).
 			fieldValue, exists := inputs[fieldName]
@@ -65,8 +65,8 @@ func FieldTokenValidator(fieldName string) func(kitdspy.ProviderConfig) InputPro
 //
 //	validator := FieldLanguageValidator("source_language")(provider)
 //	err := validator(ctx, inputs, info)
-func FieldLanguageValidator(fieldName string) func(kitdspy.ProviderConfig) InputProcessor {
-	return func(_ kitdspy.ProviderConfig) InputProcessor {
+func FieldLanguageValidator(fieldName string) func(stropdspy.ProviderConfig) InputProcessor {
+	return func(_ stropdspy.ProviderConfig) InputProcessor {
 		return func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo) error {
 			// Get field by name (configurable!).
 			langCode, exists := inputs[fieldName]

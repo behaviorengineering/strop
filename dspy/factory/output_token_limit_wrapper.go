@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/behaviorengineering/strop/dspy/validation"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -16,7 +16,7 @@ type OutputTokenLimitWrapper struct {
 	core.LLM
 	maxOutputTokens int
 	modelID         string
-	logger          kitlog.Logger
+	logger          stroplog.Logger
 }
 
 // NewOutputTokenLimitWrapper creates a new wrapper that enforces output token limits.
@@ -25,7 +25,7 @@ func NewOutputTokenLimitWrapper(
 	wrapped core.LLM,
 	maxOutputTokens int,
 	modelID string,
-	logger kitlog.Logger,
+	logger stroplog.Logger,
 ) *OutputTokenLimitWrapper {
 	return &OutputTokenLimitWrapper{
 		LLM:             wrapped,

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 )
 
 func TestExtractGeminiCandidateText_singlePart(t *testing.T) {
@@ -47,7 +47,7 @@ func TestExtractGeminiCandidateText_emptyParts(t *testing.T) {
 func TestNewGroundingLLMWrapper_usesProviderTimeout(t *testing.T) {
 	wrapper := NewGroundingLLMWrapper(
 		nil,
-		&kitdspy.GroundingConfig{},
+		&stropdspy.GroundingConfig{},
 		"key",
 		"https://generativelanguage.googleapis.com",
 		"gemini-2.5-flash",
@@ -58,6 +58,6 @@ func TestNewGroundingLLMWrapper_usesProviderTimeout(t *testing.T) {
 }
 
 func TestNewGroundingLLMWrapper_zeroTimeoutUsesAttemptDefault(t *testing.T) {
-	wrapper := NewGroundingLLMWrapper(nil, &kitdspy.GroundingConfig{}, "key", "https://example", "model", 0, nil)
+	wrapper := NewGroundingLLMWrapper(nil, &stropdspy.GroundingConfig{}, "key", "https://example", "model", 0, nil)
 	assert.Equal(t, 60*time.Second, wrapper.httpClient.Timeout)
 }

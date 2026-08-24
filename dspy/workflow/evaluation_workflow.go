@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 	"github.com/behaviorengineering/strop/dspy/actor"
 	"github.com/behaviorengineering/strop/dspy/rawresponse"
 	"github.com/behaviorengineering/strop/evaluation"
 	"github.com/behaviorengineering/strop/evaluation/criteria"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 	"github.com/behaviorengineering/strop/runreport"
 	"github.com/behaviorengineering/strop/streaming"
 
@@ -48,7 +48,7 @@ type WorkflowConfig struct {
 	Evaluators          map[evaluation.EvaluatorKey]actor.Evaluator
 	RoleInfo            evaluation.RoleInfo
 	Consolidator        actor.Consolidator
-	Logger              kitlog.Logger
+	Logger              stroplog.Logger
 	FieldNames          FieldNames
 	SanitizeError       func(error) error
 	ChainSpanCtxKeyType interface{}
@@ -61,7 +61,7 @@ type ParallelEvaluationWorkflow struct {
 	evaluators          map[evaluation.EvaluatorKey]actor.Evaluator
 	roleInfo            evaluation.RoleInfo
 	consolidator        actor.Consolidator
-	logger              kitlog.Logger
+	logger              stroplog.Logger
 	fieldNames          FieldNames
 	sanitizeError       func(error) error
 	chainSpanCtxKeyType interface{}
@@ -112,7 +112,7 @@ func parseCriterionScores(value interface{}, expectedCriterionIDs map[string]str
 		return nil, fmt.Errorf("criterion_scores is nil")
 	}
 
-	scoresMap, err := kitdspy.CoerceCriterionScoresMap(value)
+	scoresMap, err := stropdspy.CoerceCriterionScoresMap(value)
 	if err != nil {
 		return nil, err
 	}
@@ -767,7 +767,7 @@ func (w *ParallelEvaluationWorkflow) parseEvaluationResult(
 		return nil, fmt.Errorf("feedback field is missing or empty in evaluator result (evaluator: %s)", roleKey)
 	}
 
-	rationale, err := kitdspy.ExtractRequiredReasoningField(result)
+	rationale, err := stropdspy.ExtractRequiredReasoningField(result)
 	if err != nil {
 		return nil, fmt.Errorf("directives_ack field is missing or empty in evaluator result (evaluator: %s): %w", roleKey, err)
 	}
@@ -1075,17 +1075,17 @@ func evaluationPayloadByteSizes(inputs map[string]interface{}) (generatorInputBy
 	if inputs == nil {
 		return 0, 0
 	}
-	if genIn, ok := inputs[kitdspy.FieldGeneratorInput]; ok {
+	if genIn, ok := inputs[stropdspy.FieldGeneratorInput]; ok {
 		generatorInputBytes = jsonMapByteSize(genIn)
 	}
-	if genOut, ok := inputs[kitdspy.FieldGeneratorOutput]; ok {
+	if genOut, ok := inputs[stropdspy.FieldGeneratorOutput]; ok {
 		generatorOutputBytes = jsonMapByteSize(genOut)
 	}
 	return generatorInputBytes, generatorOutputBytes
 }
 
 func compositionPhaseFromEvalInputs(inputs map[string]interface{}) string {
-	genIn, ok := inputs[kitdspy.FieldGeneratorInput].(map[string]interface{})
+	genIn, ok := inputs[stropdspy.FieldGeneratorInput].(map[string]interface{})
 	if !ok {
 		return ""
 	}

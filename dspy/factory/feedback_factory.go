@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/modules"
@@ -38,7 +38,7 @@ func NewFeedbackFactory(configurator *ModuleConfigurator) *FeedbackFactory {
 func CreateFeedbackAnalysisModule[R comparable](
 	f *FeedbackFactory,
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	role R,
 	getRoleName func(R) string,
 	rolePrompts map[R]string,
@@ -78,7 +78,7 @@ func CreateFeedbackAnalysisModule[R comparable](
 func CreateFeedbackFormatterModule[R comparable](
 	f *FeedbackFactory,
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	formatterRole R,
 	getRoleName func(R) string,
 	formatterPrompt string,
