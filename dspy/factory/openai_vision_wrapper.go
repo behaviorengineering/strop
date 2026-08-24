@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -27,7 +27,7 @@ type OpenAIVisionLLMWrapper struct {
 	baseURL    string
 	modelID    string
 	httpClient *http.Client
-	logger     kitlog.Logger
+	logger     stroplog.Logger
 }
 
 // NewOpenAIVisionLLMWrapper creates a wrapper that implements multimodal chat
@@ -38,7 +38,7 @@ func NewOpenAIVisionLLMWrapper(
 	baseURL string,
 	modelID string,
 	timeout time.Duration,
-	logger kitlog.Logger,
+	logger stroplog.Logger,
 ) *OpenAIVisionLLMWrapper {
 	if timeout <= 0 {
 		timeout = 60 * time.Second

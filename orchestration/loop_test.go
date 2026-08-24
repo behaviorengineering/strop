@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 	"github.com/behaviorengineering/strop/refinement"
 	"github.com/behaviorengineering/strop/streaming"
 
@@ -18,15 +18,15 @@ type testLogger struct {
 	entry *logrus.Entry
 }
 
-func (l *testLogger) WithField(key string, value interface{}) kitlog.Logger {
+func (l *testLogger) WithField(key string, value interface{}) stroplog.Logger {
 	return &testLogger{entry: l.entry.WithField(key, value)}
 }
 
-func (l *testLogger) WithFields(fields map[string]interface{}) kitlog.Logger {
+func (l *testLogger) WithFields(fields map[string]interface{}) stroplog.Logger {
 	return &testLogger{entry: l.entry.WithFields(fields)}
 }
 
-func (l *testLogger) WithError(err error) kitlog.Logger {
+func (l *testLogger) WithError(err error) stroplog.Logger {
 	return &testLogger{entry: l.entry.WithError(err)}
 }
 
@@ -35,7 +35,7 @@ func (l *testLogger) Info(args ...interface{})  { l.entry.Info(args...) }
 func (l *testLogger) Warn(args ...interface{})  { l.entry.Warn(args...) }
 func (l *testLogger) Error(args ...interface{}) { l.entry.Error(args...) }
 
-func testKitLogger() kitlog.Logger {
+func testStropLogger() stroplog.Logger {
 	return &testLogger{entry: logrus.NewEntry(logrus.New())}
 }
 
@@ -93,7 +93,7 @@ func (f *fakeRefinementStrategy) ContextID() uuid.UUID {
 
 func TestRunRefinementLoop_perfectScoreStopsAfterSave(t *testing.T) {
 	t.Parallel()
-	policy := refinement.NewService(testKitLogger(), "rejected", "pending", 0)
+	policy := refinement.NewService(testStropLogger(), "rejected", "pending", 0)
 	strategy := &fakeRefinementStrategy{
 		scores:    []float64{10.0},
 		feedbacks: []string{"all good"},
@@ -115,7 +115,7 @@ func TestRunRefinementLoop_perfectScoreStopsAfterSave(t *testing.T) {
 
 func TestRunRefinementLoop_scoreDecreaseReturnsPreviousSelection(t *testing.T) {
 	t.Parallel()
-	policy := refinement.NewService(testKitLogger(), "rejected", "pending", 0)
+	policy := refinement.NewService(testStropLogger(), "rejected", "pending", 0)
 	previousID := uuid.New()
 	strategy := &fakeRefinementStrategy{
 		selectedID: previousID,
@@ -140,7 +140,7 @@ func TestRunRefinementLoop_scoreDecreaseReturnsPreviousSelection(t *testing.T) {
 
 func TestRunRefinementLoop_maxVersionsStopsWithoutExtraGenerations(t *testing.T) {
 	t.Parallel()
-	policy := refinement.NewService(testKitLogger(), "rejected", "pending", 0)
+	policy := refinement.NewService(testStropLogger(), "rejected", "pending", 0)
 	strategy := &fakeRefinementStrategy{
 		scores:    []float64{5.0, 6.0, 7.0, 8.0},
 		feedbacks: []string{"a", "b", "c", "d"},

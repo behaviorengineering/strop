@@ -8,10 +8,10 @@ import (
 
 	"github.com/behaviorengineering/strop/runreport"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
 	"github.com/behaviorengineering/strop/dspy/tracing"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +35,7 @@ func TestXMLInterceptorIssue_ReplicatesProductionBug(t *testing.T) {
 	module := dspymodules.New(signature, dspymodules.Config{Name: "TestTranslator"})
 
 	// Setup interceptors in the SAME ORDER as production.
-	var logger kitlog.Logger
+	var logger stroplog.Logger
 	setup := NewInterceptorSetup(
 		true, // openInferenceEnabled.
 		"test-service",
@@ -51,7 +51,7 @@ func TestXMLInterceptorIssue_ReplicatesProductionBug(t *testing.T) {
 	)
 
 	// Add interceptors FIRST (same as production).
-	setup.AddInterceptors(module, kitdspy.ProviderConfig{})
+	setup.AddInterceptors(module, stropdspy.ProviderConfig{})
 
 	// Enable XML LAST (same as production).
 	setup.EnableXMLOutput(module)
@@ -403,7 +403,7 @@ func TestEnableStructuredOutput_PreservesRetryAfterAddInterceptors(t *testing.T)
 		Backoff:     1,
 	}
 	setup := NewInterceptorSetup(false, "", retryConfig, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
-	setup.AddInterceptors(module, kitdspy.ProviderConfig{})
+	setup.AddInterceptors(module, stropdspy.ProviderConfig{})
 	afterReliability := len(module.GetInterceptors())
 	require.Greater(t, afterReliability, 0, "AddInterceptors should attach retry/runreport")
 

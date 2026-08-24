@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 )
 
 type memStore struct {
@@ -90,11 +90,11 @@ func (s *memStore) DeleteByRootEntityID(_ context.Context, rootEntityID uuid.UUI
 
 type silentLog struct{}
 
-func (silentLog) WithField(string, interface{}) kitlog.Logger { return silentLog{} }
-func (silentLog) WithFields(map[string]interface{}) kitlog.Logger {
+func (silentLog) WithField(string, interface{}) stroplog.Logger { return silentLog{} }
+func (silentLog) WithFields(map[string]interface{}) stroplog.Logger {
 	return silentLog{}
 }
-func (silentLog) WithError(error) kitlog.Logger { return silentLog{} }
+func (silentLog) WithError(error) stroplog.Logger { return silentLog{} }
 func (silentLog) Debug(...interface{})          {}
 func (silentLog) Info(...interface{})           {}
 func (silentLog) Warn(...interface{})           {}

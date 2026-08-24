@@ -3,7 +3,7 @@ package refinement
 import (
 	"testing"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -13,15 +13,15 @@ type testLogger struct {
 	entry *logrus.Entry
 }
 
-func (l *testLogger) WithField(key string, value interface{}) kitlog.Logger {
+func (l *testLogger) WithField(key string, value interface{}) stroplog.Logger {
 	return &testLogger{entry: l.entry.WithField(key, value)}
 }
 
-func (l *testLogger) WithFields(fields map[string]interface{}) kitlog.Logger {
+func (l *testLogger) WithFields(fields map[string]interface{}) stroplog.Logger {
 	return &testLogger{entry: l.entry.WithFields(fields)}
 }
 
-func (l *testLogger) WithError(err error) kitlog.Logger {
+func (l *testLogger) WithError(err error) stroplog.Logger {
 	return &testLogger{entry: l.entry.WithError(err)}
 }
 

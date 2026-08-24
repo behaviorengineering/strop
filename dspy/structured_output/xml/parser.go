@@ -18,7 +18,7 @@ import (
 	"github.com/behaviorengineering/strop/dspy/rawresponse"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 )
 
 // XMLConfig represents XML-specific configuration.
@@ -36,7 +36,7 @@ type XMLConfig struct {
 	// ExtraArrayFieldsAsNewlineString lists additional Text fields parsed as repeated XML children
 	// but stored as one newline-joined string. Built-in defaults always include usage_situations.
 	ExtraArrayFieldsAsNewlineString []string
-	Logger                          kitlog.Logger
+	Logger                          stroplog.Logger
 }
 
 // GetTagName returns the XML tag name for a field.
@@ -208,9 +208,9 @@ func convertToXMLConfig(config interface{}) XMLConfig {
 				xmlConfig.ExtraArrayFieldsAsNewlineString = out
 			}
 		case "Logger":
-			// Extract logger if it implements kitlog.Logger.
+			// Extract logger if it implements stroplog.Logger.
 			if value.IsValid() && !value.IsNil() {
-				if logger, ok := value.Interface().(kitlog.Logger); ok && logger != nil {
+				if logger, ok := value.Interface().(stroplog.Logger); ok && logger != nil {
 					xmlConfig.Logger = logger
 				}
 			}

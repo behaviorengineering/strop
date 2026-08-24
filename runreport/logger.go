@@ -1,13 +1,13 @@
 package runreport
 
 import (
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 )
 
-var defaultLogger kitlog.Logger
+var defaultLogger stroplog.Logger
 
 // SetDefaultLogger stores the app logger for run-report persistence diagnostics.
-func SetDefaultLogger(logger kitlog.Logger) {
+func SetDefaultLogger(logger stroplog.Logger) {
 	defaultLogger = logger
 }
 

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
-	kitso "github.com/behaviorengineering/strop/dspy/structured_output"
-	kitvalidation "github.com/behaviorengineering/strop/dspy/validation"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stropso "github.com/behaviorengineering/strop/dspy/structured_output"
+	stropvalidation "github.com/behaviorengineering/strop/dspy/validation"
+	stroplog "github.com/behaviorengineering/strop/log"
 	"github.com/behaviorengineering/strop/runreport"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
@@ -33,18 +33,18 @@ type InterceptorSetup struct {
 	retryConfig              *interceptors.RetryConfig
 	moduleTimeout            time.Duration // Module execution timeout.
 	// OpenInference interceptor factory - injected to avoid circular dependency.
-	createOpenInferenceInterceptor func(enabled bool, serviceName string, logger kitlog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor
-	logger                         kitlog.Logger
+	createOpenInferenceInterceptor func(enabled bool, serviceName string, logger stroplog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor
+	logger                         stroplog.Logger
 	providerLookup                 func(modelID string) string
 	modelIDByModuleName            func(moduleName string) string
 	onRegisterModuleModel          func(moduleName, modelID string)
 	runReports                     runreport.Config
 	// Input processor factory - allows pipeline-specific input processing (validation, mutation, transformation).
-	inputProcessorFactory        func(provider kitdspy.ProviderConfig) kitvalidation.InputProcessor
-	outputValidators             map[string]kitvalidation.OutputValidator
-	formatInstructionsSupplement kitso.FormatInstructionsSupplement
-	adjustParseSignature         kitso.ParseSignatureAdjuster
-	afterParse                   kitso.AfterParseHook
+	inputProcessorFactory        func(provider stropdspy.ProviderConfig) stropvalidation.InputProcessor
+	outputValidators             map[string]stropvalidation.OutputValidator
+	formatInstructionsSupplement stropso.FormatInstructionsSupplement
+	adjustParseSignature         stropso.ParseSignatureAdjuster
+	afterParse                   stropso.AfterParseHook
 }
 
 // NewInterceptorSetup creates a new interceptor setup helper.
@@ -53,12 +53,12 @@ func NewInterceptorSetup(
 	openInferenceServiceName string,
 	retryConfig *interceptors.RetryConfig,
 	moduleTimeout time.Duration,
-	createOpenInferenceInterceptor func(enabled bool, serviceName string, logger kitlog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor,
-	logger kitlog.Logger,
+	createOpenInferenceInterceptor func(enabled bool, serviceName string, logger stroplog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor,
+	logger stroplog.Logger,
 	providerLookup func(modelID string) string,
 	modelIDByModuleName func(moduleName string) string,
 	onRegisterModuleModel func(moduleName, modelID string),
-	inputProcessorFactory func(provider kitdspy.ProviderConfig) kitvalidation.InputProcessor,
+	inputProcessorFactory func(provider stropdspy.ProviderConfig) stropvalidation.InputProcessor,
 	runReports runreport.Config,
 ) *InterceptorSetup {
 	return &InterceptorSetup{
@@ -73,27 +73,27 @@ func NewInterceptorSetup(
 		onRegisterModuleModel:          onRegisterModuleModel,
 		runReports:                     runReports.Defaults(),
 		inputProcessorFactory:          inputProcessorFactory,
-		outputValidators:               make(map[string]kitvalidation.OutputValidator),
+		outputValidators:               make(map[string]stropvalidation.OutputValidator),
 	}
 }
 
 // RegisterOutputValidator registers a per-display-name output validator used during structured output setup.
-func (s *InterceptorSetup) RegisterOutputValidator(displayName string, validator kitvalidation.OutputValidator) {
+func (s *InterceptorSetup) RegisterOutputValidator(displayName string, validator stropvalidation.OutputValidator) {
 	if s == nil || displayName == "" || validator == nil {
 		return
 	}
 	if s.outputValidators == nil {
-		s.outputValidators = make(map[string]kitvalidation.OutputValidator)
+		s.outputValidators = make(map[string]stropvalidation.OutputValidator)
 	}
 	s.outputValidators[displayName] = validator
 }
 
 // RegisterMandatoryFields registers ValidateMandatoryFields for the module display name.
 func (s *InterceptorSetup) RegisterMandatoryFields(displayName string, fields []string) {
-	s.RegisterOutputValidator(displayName, kitvalidation.ValidateMandatoryFields(fields))
+	s.RegisterOutputValidator(displayName, stropvalidation.ValidateMandatoryFields(fields))
 }
 
-func (s *InterceptorSetup) kitLogger() kitlog.Logger {
+func (s *InterceptorSetup) stropLogger() stroplog.Logger {
 	if s == nil {
 		return nil
 	}
@@ -102,9 +102,9 @@ func (s *InterceptorSetup) kitLogger() kitlog.Logger {
 
 // SetStructuredOutputHooks registers optional parse/format hooks (product-specific).
 func (s *InterceptorSetup) SetStructuredOutputHooks(
-	supplement kitso.FormatInstructionsSupplement,
-	adjust kitso.ParseSignatureAdjuster,
-	after kitso.AfterParseHook,
+	supplement stropso.FormatInstructionsSupplement,
+	adjust stropso.ParseSignatureAdjuster,
+	after stropso.AfterParseHook,
 ) {
 	if s == nil {
 		return
@@ -115,7 +115,7 @@ func (s *InterceptorSetup) SetStructuredOutputHooks(
 }
 
 // ComposeParseSignatureAdjuster chains next after any existing parse-signature adjuster.
-func (s *InterceptorSetup) ComposeParseSignatureAdjuster(next kitso.ParseSignatureAdjuster) {
+func (s *InterceptorSetup) ComposeParseSignatureAdjuster(next stropso.ParseSignatureAdjuster) {
 	if s == nil || next == nil {
 		return
 	}
@@ -148,7 +148,7 @@ func (s *InterceptorSetup) EnableStructuredOutput(module core.InterceptableModul
 		})
 	}
 
-	config := kitso.DefaultConfig().
+	config := stropso.DefaultConfig().
 		WithStrictParsing(true).
 		WithValidation(false).
 		WithFallback(false).
@@ -164,7 +164,7 @@ func (s *InterceptorSetup) EnableStructuredOutput(module core.InterceptableModul
 		config = config.WithAfterParse(s.afterParse)
 	}
 
-	if lg := s.kitLogger(); lg != nil {
+	if lg := s.stropLogger(); lg != nil {
 		config = config.WithLogger(lg)
 		s.debugLogName(displayName, "Logger added to structured output config", map[string]interface{}{
 			"logger_available": true,
@@ -175,7 +175,7 @@ func (s *InterceptorSetup) EnableStructuredOutput(module core.InterceptableModul
 		})
 	}
 
-	parser, err := kitso.GetParser(kitso.FormatXML, config)
+	parser, err := stropso.GetParser(stropso.FormatXML, config)
 	if err != nil {
 		s.debugLogName(displayName, "Failed to get parser, falling back to dspy-go XML", map[string]interface{}{
 			"error": err,
@@ -190,7 +190,7 @@ func (s *InterceptorSetup) EnableStructuredOutput(module core.InterceptableModul
 		return
 	}
 
-	structuredInterceptor := kitso.StructuredOutputInterceptor(parser, config)
+	structuredInterceptor := stropso.StructuredOutputInterceptor(parser, config)
 
 	interceptorsBefore := module.GetInterceptors()
 	s.debugLogName(displayName, "Enabling structured output on module", map[string]interface{}{
@@ -279,7 +279,7 @@ func stripDSPyXMLInterceptor(module core.InterceptableModule, xmlAlreadyEnabled 
 // addValidationInterceptor adds a validation interceptor to ensure all output fields are present and non-empty.
 func (s *InterceptorSetup) addValidationInterceptor(module core.InterceptableModule, interceptorsList *[]core.ModuleInterceptor) {
 	moduleName := interceptableDisplayName(module)
-	validator := kitvalidation.ValidateMandatoryFields(nil)
+	validator := stropvalidation.ValidateMandatoryFields(nil)
 	if s != nil && s.outputValidators != nil {
 		if registered, ok := s.outputValidators[moduleName]; ok && registered != nil {
 			validator = registered
@@ -291,13 +291,13 @@ func (s *InterceptorSetup) addValidationInterceptor(module core.InterceptableMod
 func (s *InterceptorSetup) appendValidationInterceptor(
 	module core.InterceptableModule,
 	interceptorsList *[]core.ModuleInterceptor,
-	validator kitvalidation.OutputValidator,
+	validator stropvalidation.OutputValidator,
 ) {
-	var validationLogger kitvalidation.Logger
-	if lg := s.kitLogger(); lg != nil {
+	var validationLogger stropvalidation.Logger
+	if lg := s.stropLogger(); lg != nil {
 		validationLogger = lg
 	}
-	validationInterceptor := kitvalidation.ValidationInterceptor(validator, validationLogger)
+	validationInterceptor := stropvalidation.ValidationInterceptor(validator, validationLogger)
 
 	*interceptorsList = append(*interceptorsList, validationInterceptor)
 
@@ -322,7 +322,7 @@ func (s *InterceptorSetup) debugLogName(moduleName, message string, fields map[s
 	s.logger.WithFields(allFields).Debug(message)
 }
 
-func (s *InterceptorSetup) reliabilityInterceptors(provider kitdspy.ProviderConfig) []core.ModuleInterceptor {
+func (s *InterceptorSetup) reliabilityInterceptors(provider stropdspy.ProviderConfig) []core.ModuleInterceptor {
 	if s == nil {
 		return nil
 	}
@@ -354,7 +354,7 @@ func interceptableDisplayName(module core.InterceptableModule) string {
 // If inputProcessorFactory is provided, it will be called with the provider config to create
 // an input processing interceptor (validation, mutation, transformation).
 // When OpenInference is enabled, registers module display name -> model ID for cost-tracking fallback.
-func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, provider kitdspy.ProviderConfig) {
+func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, provider stropdspy.ProviderConfig) {
 	// Register module -> model for cost-tracking when ExecutionState does not contain model ID.
 	if s.onRegisterModuleModel != nil && provider.Model != "" {
 		s.onRegisterModuleModel(module.GetDisplayName(), provider.Model)
@@ -384,11 +384,11 @@ func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, prov
 	// The processor can validate, mutate, or transform inputs based on module and provider config.
 	if s.inputProcessorFactory != nil {
 		processor := s.inputProcessorFactory(provider)
-		var processingLogger kitvalidation.Logger
-		if lg := s.kitLogger(); lg != nil {
+		var processingLogger stropvalidation.Logger
+		if lg := s.stropLogger(); lg != nil {
 			processingLogger = lg
 		}
-		inputProcessingInterceptor := kitvalidation.InputProcessingInterceptor(processor, processingLogger)
+		inputProcessingInterceptor := stropvalidation.InputProcessingInterceptor(processor, processingLogger)
 		existingInterceptors = append(existingInterceptors, inputProcessingInterceptor)
 
 		if s.logger != nil {

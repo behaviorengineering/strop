@@ -9,7 +9,7 @@ import (
 	"github.com/behaviorengineering/strop/streaming"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 )
 
 // MandatoryFieldsResolver selects mandatory output fields from module inputs.
@@ -21,7 +21,7 @@ type MandatoryFieldsResolver func(inputs map[string]any, info *core.ModuleInfo) 
 type OutputValidator func(ctx context.Context, inputs map[string]any, outputs map[string]any, info *core.ModuleInfo) error
 
 // Logger is the strop logger used for validation failures and retries.
-type Logger = kitlog.Logger
+type Logger = stroplog.Logger
 
 // ValidationInterceptor creates a generic interceptor that validates module outputs.
 // If validation fails, it returns an error that will trigger the retry interceptor.

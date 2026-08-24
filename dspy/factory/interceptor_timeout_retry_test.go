@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/interceptors"
@@ -21,7 +21,7 @@ func TestReliabilityInterceptors_attemptTimeoutLeavesRetryBudget(t *testing.T) {
 			Backoff:     1,
 		},
 	}
-	provider := kitdspy.ProviderConfig{Timeout: "80ms"}
+	provider := stropdspy.ProviderConfig{Timeout: "80ms"}
 	chain := setup.reliabilityInterceptors(provider)
 	if len(chain) != 3 {
 		t.Fatalf("got %d interceptors, want overall + retry + attempt", len(chain))
@@ -64,7 +64,7 @@ func TestReliabilityInterceptors_skipsDuplicateAttemptTimeout(t *testing.T) {
 			Backoff:     1,
 		},
 	}
-	chain := setup.reliabilityInterceptors(kitdspy.ProviderConfig{})
+	chain := setup.reliabilityInterceptors(stropdspy.ProviderConfig{})
 	if len(chain) != 2 {
 		t.Fatalf("got %d interceptors, want overall + retry when provider timeout equals module timeout", len(chain))
 	}

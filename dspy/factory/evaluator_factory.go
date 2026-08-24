@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
 	"github.com/behaviorengineering/strop/evaluation"
 	"github.com/behaviorengineering/strop/evaluation/criteria"
@@ -42,7 +42,7 @@ func NewEvaluatorFactory(configurator *ModuleConfigurator) *EvaluatorFactory {
 func CreateEvaluators[R comparable](
 	f *EvaluatorFactory,
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	roles []R,
 	getRoleName func(R) string,
 	rolePrompts map[R]string,
@@ -98,8 +98,8 @@ type ChainedEvaluatorPrompts struct {
 func CreateChainedEvaluators[R comparable](
 	f *EvaluatorFactory,
 	ctx context.Context,
-	provider kitdspy.ProviderConfig, // Default provider
-	roleProviders map[R]kitdspy.ProviderConfig, // Optional per-role overrides
+	provider stropdspy.ProviderConfig, // Default provider
+	roleProviders map[R]stropdspy.ProviderConfig, // Optional per-role overrides
 	roles []R,
 	getRoleName func(R) string,
 	rolePrompts map[R]ChainedEvaluatorPrompts,
@@ -150,16 +150,16 @@ func CreateChainedEvaluators[R comparable](
 func CreateChainedEvaluatorsFromConfig(
 	f *EvaluatorFactory,
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
-	roleProviders map[evaluation.EvaluatorKey]kitdspy.ProviderConfig,
-	config *kitdspy.ChainedEvaluatorConfig,
-	formatter kitdspy.EvaluatorSignatureFormatter,
+	provider stropdspy.ProviderConfig,
+	roleProviders map[evaluation.EvaluatorKey]stropdspy.ProviderConfig,
+	config *stropdspy.ChainedEvaluatorConfig,
+	formatter stropdspy.EvaluatorSignatureFormatter,
 	errorPrefix string,
 ) (map[evaluation.EvaluatorKey]core.Module, error) {
 	if config == nil {
 		return nil, errors.New("ChainedEvaluatorConfig is required")
 	}
-	modulesMap, err := kitdspy.CreateChainedModulesFromConfig(config, formatter)
+	modulesMap, err := stropdspy.CreateChainedModulesFromConfig(config, formatter)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errorPrefix, err)
 	}
@@ -182,7 +182,7 @@ func CreateChainedEvaluatorsFromConfig(
 // CreateChainedEvaluators (e.g. YouTube structural evaluators).
 func (f *EvaluatorFactory) SetupChainedModule(
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	chainedModule core.Module,
 	errorPrefix string,
 ) error {
@@ -204,7 +204,7 @@ func (f *EvaluatorFactory) SetupChainedModule(
 func CreateConsolidator[R comparable](
 	f *EvaluatorFactory,
 	ctx context.Context,
-	provider kitdspy.ProviderConfig,
+	provider stropdspy.ProviderConfig,
 	consolidatorRole R,
 	getRoleName func(R) string,
 	consolidatorPrompt string,

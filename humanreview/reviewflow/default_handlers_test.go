@@ -11,15 +11,15 @@ import (
 
 	"github.com/behaviorengineering/strop/evaluation/criteria"
 	"github.com/behaviorengineering/strop/humanreview"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 	"github.com/behaviorengineering/strop/regenerate"
 )
 
 type silentLog struct{}
 
-func (silentLog) WithField(string, interface{}) kitlog.Logger     { return silentLog{} }
-func (silentLog) WithFields(map[string]interface{}) kitlog.Logger { return silentLog{} }
-func (silentLog) WithError(error) kitlog.Logger                   { return silentLog{} }
+func (silentLog) WithField(string, interface{}) stroplog.Logger     { return silentLog{} }
+func (silentLog) WithFields(map[string]interface{}) stroplog.Logger { return silentLog{} }
+func (silentLog) WithError(error) stroplog.Logger                   { return silentLog{} }
 func (silentLog) Debug(...interface{})                            {}
 func (silentLog) Info(...interface{})                             {}
 func (silentLog) Warn(...interface{})                             {}
@@ -166,19 +166,19 @@ func (f *fakeLearner) AfterApproval(context.Context, *humanreview.HumanEvaluatio
 }
 
 func TestDefaultHandlers_nilLearnerStillApproves(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job_nil_learner", "kit_step_nil_learner")
+	humanreview.DefaultJobStepRegistry().Register("strop_job_nil_learner", "strop_step_nil_learner")
 	root := uuid.New()
 	eval := &humanreview.HumanEvaluation{
 		ID:           uuid.New(),
 		RootEntityID: root,
-		Job:          "kit_job_nil_learner",
+		Job:          "strop_job_nil_learner",
 		PipelineType: "demo",
 		Status:       humanreview.StatusInProgress,
 	}
 	fp := &fakePorts{agrees: true, eval: eval}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job_nil_learner",
+		Job:          "strop_job_nil_learner",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 	}
 	e := NewEngine(Config{Start: StateInit})
@@ -194,12 +194,12 @@ func TestDefaultHandlers_nilLearnerStillApproves(t *testing.T) {
 }
 
 func TestDefaultHandlers_unknownPackSkipsLearner(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job_unknown_pack", "kit_step_unknown_pack")
+	humanreview.DefaultJobStepRegistry().Register("strop_job_unknown_pack", "strop_step_unknown_pack")
 	root := uuid.New()
 	eval := &humanreview.HumanEvaluation{
 		ID:           uuid.New(),
 		RootEntityID: root,
-		Job:          "kit_job_unknown_pack",
+		Job:          "strop_job_unknown_pack",
 		PipelineType: "demo_unknown",
 		Status:       humanreview.StatusInProgress,
 	}
@@ -207,7 +207,7 @@ func TestDefaultHandlers_unknownPackSkipsLearner(t *testing.T) {
 	learner := &fakeLearner{}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job_unknown_pack",
+		Job:          "strop_job_unknown_pack",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 	}
 	e := NewEngine(Config{Start: StateInit})
@@ -294,19 +294,19 @@ func TestDefaultHandlers_nonCompositionJobSkipsLearner(t *testing.T) {
 }
 
 func TestDefaultHandlers_agreePath(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job", "kit_step")
+	humanreview.DefaultJobStepRegistry().Register("strop_job", "strop_step")
 	root := uuid.New()
 	eval := &humanreview.HumanEvaluation{
 		ID:           uuid.New(),
 		RootEntityID: root,
-		Job:          "kit_job",
+		Job:          "strop_job",
 		PipelineType: "demo",
 		Status:       humanreview.StatusInProgress,
 	}
 	fp := &fakePorts{agrees: true, eval: eval}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job",
+		Job:          "strop_job",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 	}
 	e := NewEngine(Config{Start: StateInit})
@@ -326,17 +326,17 @@ func TestDefaultHandlers_agreePath(t *testing.T) {
 }
 
 func TestDefaultHandlers_disagreeThenRegen(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job2", "kit_step2")
+	humanreview.DefaultJobStepRegistry().Register("strop_job2", "strop_step2")
 	root := uuid.New()
 	store := newMemStore()
 	gate := humanreview.NewGate(store, silentLog{})
-	eval, err := gate.Start(context.Background(), "demo", root, "kit_job2")
+	eval, err := gate.Start(context.Background(), "demo", root, "strop_job2")
 	require.NoError(t, err)
 
 	fp := &fakePorts{agrees: false, comment: "rewrite", eval: eval}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job2",
+		Job:          "strop_job2",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 		EvaluationID: eval.ID,
 	}
@@ -369,17 +369,17 @@ func (c *capturingNormalizer) Normalize(ctx context.Context, comment string) (st
 }
 
 func TestDefaultHandlers_emptyCommentSkipsRegenModePrompt(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job_empty_comment", "kit_step_empty_comment")
+	humanreview.DefaultJobStepRegistry().Register("strop_job_empty_comment", "strop_step_empty_comment")
 	root := uuid.New()
 	store := newMemStore()
 	gate := humanreview.NewGate(store, silentLog{})
-	eval, err := gate.Start(context.Background(), "demo", root, "kit_job_empty_comment")
+	eval, err := gate.Start(context.Background(), "demo", root, "strop_job_empty_comment")
 	require.NoError(t, err)
 
 	fp := &fakePorts{agrees: false, comment: "", eval: eval}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job_empty_comment",
+		Job:          "strop_job_empty_comment",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 		EvaluationID: eval.ID,
 	}
@@ -399,18 +399,18 @@ func TestDefaultHandlers_emptyCommentSkipsRegenModePrompt(t *testing.T) {
 }
 
 func TestDefaultHandlers_researchFlagPassedToRegen(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job_research", "kit_step_research")
+	humanreview.DefaultJobStepRegistry().Register("strop_job_research", "strop_step_research")
 	root := uuid.New()
 	store := newMemStore()
 	gate := humanreview.NewGate(store, silentLog{})
-	eval, err := gate.Start(context.Background(), "demo", root, "kit_job_research")
+	eval, err := gate.Start(context.Background(), "demo", root, "strop_job_research")
 	require.NoError(t, err)
 
 	normalizer := &capturingNormalizer{}
 	fp := &fakePorts{agrees: false, comment: "rewrite", regenMode: true, eval: eval}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job_research",
+		Job:          "strop_job_research",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 		EvaluationID: eval.ID,
 	}
@@ -432,12 +432,12 @@ func TestDefaultHandlers_researchFlagPassedToRegen(t *testing.T) {
 }
 
 func TestDefaultHandlers_proposeUsesRefreshedEval(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job_refresh", "kit_step_refresh")
+	humanreview.DefaultJobStepRegistry().Register("strop_job_refresh", "strop_step_refresh")
 	root := uuid.New()
 	eval := &humanreview.HumanEvaluation{
 		ID:           uuid.New(),
 		RootEntityID: root,
-		Job:          "kit_job_refresh",
+		Job:          "strop_job_refresh",
 		PipelineType: "demo",
 		Status:       humanreview.StatusInProgress,
 	}
@@ -446,7 +446,7 @@ func TestDefaultHandlers_proposeUsesRefreshedEval(t *testing.T) {
 	fp := &fakePorts{agrees: true, eval: eval, evalAfterRecord: after}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job_refresh",
+		Job:          "strop_job_refresh",
 		CriterionIDs: []criteria.CriterionID{"quality"},
 		EvaluationID: eval.ID,
 	}
@@ -519,12 +519,12 @@ func (s *missingAfterResetStore) DeleteByRootEntityID(context.Context, uuid.UUID
 }
 
 func TestDefaultHandlers_gateStartNilFails(t *testing.T) {
-	humanreview.DefaultJobStepRegistry().Register("kit_job_nil_start", "kit_step_nil_start")
+	humanreview.DefaultJobStepRegistry().Register("strop_job_nil_start", "strop_step_nil_start")
 	root := uuid.New()
 	eval := &humanreview.HumanEvaluation{
 		ID:           uuid.New(),
 		RootEntityID: root,
-		Job:          "kit_job_nil_start",
+		Job:          "strop_job_nil_start",
 		PipelineType: "demo",
 		Status:       humanreview.StatusRejected,
 	}
@@ -533,7 +533,7 @@ func TestDefaultHandlers_gateStartNilFails(t *testing.T) {
 	fp := &fakePorts{eval: eval}
 	run := &RunState{
 		RootID:       root,
-		Job:          "kit_job_nil_start",
+		Job:          "strop_job_nil_start",
 		EvaluationID: eval.ID,
 	}
 	e := NewEngine(Config{Start: StateRegeneration})

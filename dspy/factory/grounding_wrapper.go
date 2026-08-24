@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	kitdspy "github.com/behaviorengineering/strop/dspy"
-	kitlog "github.com/behaviorengineering/strop/log"
+	stropdspy "github.com/behaviorengineering/strop/dspy"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -22,23 +22,23 @@ import (
 // and makes direct HTTP requests with the google_search tool.
 type GroundingLLMWrapper struct {
 	core.LLM
-	groundingConfig *kitdspy.GroundingConfig
+	groundingConfig *stropdspy.GroundingConfig
 	apiKey          string
 	baseURL         string
 	modelID         string
 	httpClient      *http.Client
-	logger          kitlog.Logger
+	logger          stroplog.Logger
 }
 
 // NewGroundingLLMWrapper creates a new wrapper that adds Google Search grounding to Gemini LLM requests.
 func NewGroundingLLMWrapper(
 	wrapped core.LLM,
-	groundingConfig *kitdspy.GroundingConfig,
+	groundingConfig *stropdspy.GroundingConfig,
 	apiKey string,
 	baseURL string,
 	modelID string,
 	timeout time.Duration,
-	logger kitlog.Logger,
+	logger stroplog.Logger,
 ) *GroundingLLMWrapper {
 	if timeout <= 0 {
 		timeout = 60 * time.Second

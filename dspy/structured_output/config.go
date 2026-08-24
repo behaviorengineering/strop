@@ -3,7 +3,7 @@ package structured_output
 import (
 	"time"
 
-	kitlog "github.com/behaviorengineering/strop/log"
+	stroplog "github.com/behaviorengineering/strop/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -63,7 +63,7 @@ type Config struct {
 	ExtraArrayFieldsAsNewlineString []string
 
 	// Logger for debug logging (optional).
-	Logger kitlog.Logger
+	Logger stroplog.Logger
 
 	// FormatInstructionsSupplement appends product-specific XML rules (optional).
 	FormatInstructionsSupplement FormatInstructionsSupplement
@@ -149,7 +149,7 @@ func (c Config) WithPreserveWhitespace(preserve bool) Config {
 }
 
 // WithLogger sets the logger for debug logging.
-func (c Config) WithLogger(logger kitlog.Logger) Config {
+func (c Config) WithLogger(logger stroplog.Logger) Config {
 	c.Logger = logger
 	return c
 }
