@@ -6,7 +6,7 @@ import "strings"
 const ArtifactContentRetrievalKey = "retrieval"
 
 // RetrievalSnapshot is the portable pattern + novelty label on a learning artifact.
-// Pack extras stay opaque JSON so kit does not import pipeline field names.
+// Pack extras stay opaque JSON so strop does not import pipeline field names.
 type RetrievalSnapshot struct {
 	ObjectiveSummary string                 `json:"objective_summary"`
 	DistinctiveMove  string                 `json:"distinctive_move"`

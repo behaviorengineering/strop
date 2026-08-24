@@ -10,7 +10,7 @@ type GroundingConfig struct {
 	DynamicThreshold float64
 }
 
-// ProviderConfig is the portable AI provider DTO used by kit factories.
+// ProviderConfig is the portable AI provider DTO used by strop factories.
 // Apps map YAML/env into this type at the container boundary.
 type ProviderConfig struct {
 	APIKey           string

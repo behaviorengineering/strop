@@ -20,7 +20,7 @@ type MandatoryFieldsResolver func(inputs map[string]any, info *core.ModuleInfo) 
 // Returns an error if validation fails, nil if validation passes.
 type OutputValidator func(ctx context.Context, inputs map[string]any, outputs map[string]any, info *core.ModuleInfo) error
 
-// Logger is the kit logger used for validation failures and retries.
+// Logger is the strop logger used for validation failures and retries.
 type Logger = kitlog.Logger
 
 // ValidationInterceptor creates a generic interceptor that validates module outputs.

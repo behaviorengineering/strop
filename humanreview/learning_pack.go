@@ -5,7 +5,7 @@ import (
 )
 
 // LearningPack is the pipeline-owned composition-job list. Chain loading and
-// attribution stay in the app until later slices; kit must not import product types.
+// attribution stay in the app until later slices; strop must not import product types.
 type LearningPack interface {
 	PipelineType() PipelineType
 	CompositionJobs() []Job

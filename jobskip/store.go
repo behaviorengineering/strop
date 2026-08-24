@@ -25,7 +25,7 @@ type Item struct {
 	CreatedAt time.Time
 }
 
-// Store persists per-job skips. Implementations must not require a kit-level transaction type.
+// Store persists per-job skips. Implementations must not require a strop-level transaction type.
 type Store interface {
 	Skip(ctx context.Context, rootID uuid.UUID, job string, reason *string) error
 	Unskip(ctx context.Context, rootID uuid.UUID, job string) error
@@ -33,7 +33,7 @@ type Store interface {
 	List(ctx context.Context, job string) ([]Record, error)
 }
 
-// Labeler maps skip records to display items. The kit never knows product titles.
+// Labeler maps skip records to display items. Strop never knows product titles.
 type Labeler interface {
 	Labels(ctx context.Context, records []Record) ([]Item, error)
 }

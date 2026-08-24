@@ -38,7 +38,7 @@ import (
 | `streaming` | Inference event channel types, StreamHandler, Actor constructors |
 | `runreport` | JSON execution traces |
 | `imageread` | Image load + visual brief helpers |
-| `log` | Minimal logger interface for kit packages |
+| `log` | Minimal logger interface for strop packages |
 | `evaluation` | Aggregation types, criterion registry/prompt builder, typed keys |
 | `humanreview` | Gate, FeedbackNormalizer, ScoreProposer, stored-feedback helpers, LearningService / LearningStore |
 | `humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
@@ -47,7 +47,7 @@ import (
 ## Boundary rules
 
 1. No imports of this repo’s `internal/` packages.
-2. No product-specific prompts, job enums, or criterion *copy* (IDs for product criteria may live in the kit; rubrics register via app packs).
+2. No product-specific prompts, job enums, or criterion *copy* (IDs for product criteria may live in strop; rubrics register via app packs).
 3. App code maps its config/logger into strop types at the boundary.
 
 ## Second-app bootstrap
@@ -97,7 +97,7 @@ Both implement `CompositionStrategy` for `RunCompositionLoop` (ordered phases, p
 
 ### Field-walk (`NewFieldWalkStrategy`)
 
-One owned field per phase (phase ID = field key). The kit decides pass/fail: `MinPassScore`, non-empty output, empty source auto-pass, version feedback applied once. Prior fields only are locked. Default result: `FieldWalkState` + `evaluation.AggregateLabeledEvals`.
+One owned field per phase (phase ID = field key). Strop decides pass/fail: `MinPassScore`, non-empty output, empty source auto-pass, version feedback applied once. Prior fields only are locked. Default result: `FieldWalkState` + `evaluation.AggregateLabeledEvals`.
 
 App supplies `FieldPhaseRunner`, phase defs, `MinPassScore`, optional `SourceText`, and seed draft.
 
@@ -105,7 +105,7 @@ App supplies `FieldPhaseRunner`, phase defs, `MinPassScore`, optional `SourceTex
 
 ### Section-walk (`NewSectionWalkStrategy`)
 
-Typed field-walk over **`DocumentSectionDefinition`**: one section ID per phase, kit pass/fail (`MinPassScore`, non-empty output, empty source auto-pass, version feedback once). Prior sections only are locked. Default result: `SectionWalkState[T]` + aggregated evals.
+Typed field-walk over **`DocumentSectionDefinition`**: one section ID per phase, strop pass/fail (`MinPassScore`, non-empty output, empty source auto-pass, version feedback once). Prior sections only are locked. Default result: `SectionWalkState[T]` + aggregated evals.
 
 App supplies `SectionFieldRunner`, `SectionCodec[T]` (`ToMap` / `FromMap`, optional `SourceText`), section recipe, seed draft, and optional `EmptyResultErr`.
 
@@ -159,8 +159,8 @@ Portable recipe for phased multi-field assembly: phase order, IDs, `ActiveOutput
 
 | Shape | Use |
 |-------|-----|
-| One string field per step, kit pass/fail, flat map | `NewFieldWalkStrategy` |
-| One section per step, kit pass/fail, typed draft | `DocumentSectionDefinition` + `NewSectionWalkStrategy` |
+| One string field per step, strop pass/fail, flat map | `NewFieldWalkStrategy` |
+| One section per step, strop pass/fail, typed draft | `DocumentSectionDefinition` + `NewSectionWalkStrategy` |
 | Multi-field phases, app pass/fail | `DocumentArcDefinition` + `NewPhaseWalkStrategy` |
 | Single generator call | `JobRunner` only — no arc |
 
