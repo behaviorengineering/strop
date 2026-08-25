@@ -8,7 +8,8 @@
 //  4. App adapters (logger, config mapping) live in the consuming app.
 //
 // Included: regenerate, imageread, log, refinement, streaming, runreport,
-// orchestration (including NewFieldWalkStrategy, NewSectionWalkStrategy,
+// agentsession (one directory per short-lived agent conversation under an
+// app-injected Root), orchestration (including NewFieldWalkStrategy, NewSectionWalkStrategy,
 // DocumentArcDefinition, DocumentSectionDefinition), dspy (ProviderConfig, XML
 // structured output, factories, registry, JobRunner, workflow, modules,
 // generic validation, tracing), evaluation (criteria engine + generic

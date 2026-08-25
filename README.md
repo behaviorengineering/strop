@@ -37,6 +37,7 @@ import (
 | `regenerate` | Force / feedback options for re-runs |
 | `streaming` | Inference event channel types, StreamHandler, Actor constructors |
 | `runreport` | JSON execution traces |
+| `agentsession` | One directory per short-lived agent conversation (transcript, card, evidence) |
 | `imageread` | Image load + visual brief helpers |
 | `log` | Minimal logger interface for strop packages |
 | `evaluation` | Aggregation types, criterion registry/prompt builder, typed keys |
