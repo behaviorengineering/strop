@@ -36,7 +36,7 @@ type GenerationResult struct {
 	Demos   DemoSelection
 }
 
-// LearningServiceForGeneration provides examples for a job/step.
+// LearningServiceForGeneration provides examples and guides for a job/step.
 type LearningServiceForGeneration interface {
 	GetExamplesForGeneration(
 		ctx context.Context,
@@ -45,6 +45,15 @@ type LearningServiceForGeneration interface {
 		context map[string]interface{},
 		limit int,
 	) ([]*LearningExampleArtifact, error)
+	// GetGuidesForGeneration returns transferable principle strings (content_rule).
+	// Fail open: empty slice when none; errors are logged by JobRunner.
+	GetGuidesForGeneration(
+		ctx context.Context,
+		job string,
+		step string,
+		context map[string]interface{},
+		limit int,
+	) ([]string, error)
 }
 
 // ExampleFormatter converts learning artifacts into DSPy examples for a job/step.
@@ -148,6 +157,7 @@ func (r *JobRunner) GenerateResult(
 	}
 	inputs := input.ToMap()
 	inputs[stropdspy.FieldIterationVersion] = input.GetVersion()
+	r.fillRetrievedGuides(ctx, config.JobName, config.StepName, inputs)
 
 	if eventChan != nil {
 		ctx = streaming.ContextWithEventChannel(ctx, eventChan)
@@ -258,6 +268,52 @@ func (r *JobRunner) retrieveAndSetExamples(
 	}
 	tracing.MarkDemoSelectionOnChainSpan(ctx, job, step, selection.NearID, selection.ContrastID)
 	return selection, nil
+}
+
+const maxRetrievedGuides = 2
+
+// fillRetrievedGuides loads content_rule principles into inputs[FieldRetrievedGuides].
+// Fail-open: leaves empty string when learning is nil or retrieval fails.
+func (r *JobRunner) fillRetrievedGuides(
+	ctx context.Context,
+	job, step string,
+	inputs map[string]interface{},
+) {
+	if r.learningService == nil || inputs == nil {
+		return
+	}
+	guides, err := r.learningService.GetGuidesForGeneration(ctx, job, step, inputs, maxRetrievedGuides)
+	if err != nil {
+		if r.logger != nil {
+			r.logger.WithError(err).Warn("Failed to retrieve learning guides, continuing without guides")
+		}
+		inputs[stropdspy.FieldRetrievedGuides] = ""
+		return
+	}
+	inputs[stropdspy.FieldRetrievedGuides] = FormatRetrievedGuides(guides)
+	if r.logger != nil && len(guides) > 0 {
+		r.logger.WithFields(map[string]interface{}{
+			"job": job, "step": step, "guides": len(guides),
+		}).Debug("Filled retrieved_guides on generator inputs")
+	}
+}
+
+// FormatRetrievedGuides renders transferable principles as XML items for the generator input.
+func FormatRetrievedGuides(guides []string) string {
+	if len(guides) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, g := range guides {
+		trimmed := strings.TrimSpace(g)
+		if trimmed == "" {
+			continue
+		}
+		b.WriteString("<item>")
+		b.WriteString(trimmed)
+		b.WriteString("</item>\n")
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // FormatExample builds a single DSPy example from raw input/output and builder funcs.

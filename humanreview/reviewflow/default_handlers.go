@@ -217,6 +217,9 @@ func runLearnerAfterApproval(
 	if pack == nil || !pack.IsCompositionJob(run.Job) {
 		return nil
 	}
-	_ = ports.Learner.AfterApproval(ctx, eval)
+	if learnErr := ports.Learner.AfterApproval(ctx, eval); learnErr != nil {
+		// Fail-open: approval already succeeded; log via engine is not available here.
+		_ = learnErr
+	}
 	return nil
 }

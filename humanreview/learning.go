@@ -41,20 +41,22 @@ const (
 type DemoSelection struct {
 	NearID     string // UUID string; empty if none
 	ContrastID string
+	Slot       string // Optional section/phase id when one version records multiple demos.
 }
 
-// GenerationDemoUse records which demos sat on one composition version.
+// GenerationDemoUse records which demos sat on one composition version (or one slot within it).
 type GenerationDemoUse struct {
-	ID                 uuid.UUID  `json:"id"`
+	ID                 uuid.UUID    `json:"id"`
 	PipelineType       PipelineType `json:"pipeline_type"`
-	RootEntityID       uuid.UUID  `json:"root_entity_id"`
-	Job                Job        `json:"job"`
-	Step               Step       `json:"step"`
-	VersionID          uuid.UUID  `json:"version_id"`
-	NearArtifactID     uuid.UUID  `json:"near_artifact_id"`
-	ContrastArtifactID *uuid.UUID `json:"contrast_artifact_id,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	RejectRecordedAt   *time.Time `json:"reject_recorded_at,omitempty"`
+	RootEntityID       uuid.UUID    `json:"root_entity_id"`
+	Job                Job          `json:"job"`
+	Step               Step         `json:"step"`
+	VersionID          uuid.UUID    `json:"version_id"`
+	Slot               string       `json:"slot,omitempty"`
+	NearArtifactID     uuid.UUID    `json:"near_artifact_id"`
+	ContrastArtifactID *uuid.UUID   `json:"contrast_artifact_id,omitempty"`
+	CreatedAt          time.Time    `json:"created_at"`
+	RejectRecordedAt   *time.Time   `json:"reject_recorded_at,omitempty"`
 }
 
 // RejectedDemoVersion is one rejected composition version that used a candidate demo.
@@ -109,6 +111,14 @@ type LearningService interface {
 		contextMap map[string]interface{},
 		limit int,
 	) ([]*LearningArtifact, error)
+	// GetGuidesForGeneration returns transferable principle strings from approved content_rule rows.
+	GetGuidesForGeneration(
+		ctx context.Context,
+		job Job,
+		step Step,
+		contextMap map[string]interface{},
+		limit int,
+	) ([]string, error)
 	FindCandidatesForMerge(
 		ctx context.Context,
 		job Job,
@@ -167,6 +177,22 @@ type LearningStore interface {
 	Update(ctx context.Context, artifact *LearningArtifact) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	GetPendingByEvaluationID(ctx context.Context, evaluationID uuid.UUID) ([]*LearningArtifact, error)
+	// FindByEvaluationJobStepAndType returns an existing row or (nil, nil).
+	FindByEvaluationJobStepAndType(
+		ctx context.Context,
+		evaluationID uuid.UUID,
+		job Job,
+		step Step,
+		artifactType string,
+	) (*LearningArtifact, error)
+	// ListByEvaluationJobStepAndType returns pending+approved rows for eval/job/step/type.
+	ListByEvaluationJobStepAndType(
+		ctx context.Context,
+		evaluationID uuid.UUID,
+		job Job,
+		step Step,
+		artifactType string,
+	) ([]*LearningArtifact, error)
 	GetApprovedByJobStep(
 		ctx context.Context,
 		job Job,
