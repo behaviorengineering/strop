@@ -146,11 +146,17 @@ func (l *CompositionLearner) AfterApproval(ctx context.Context, eval *humanrevie
 	}
 
 	creates := make([]humanreview.LearningCandidate, 0)
+	updatedGroups := make(map[string]struct{})
 	for _, p := range planned {
 		switch p.action {
 		case humanreview.MergeActionSkip:
 			continue
 		case humanreview.MergeActionUpdate:
+			key := mergeGroupKey(p.candidate)
+			if _, done := updatedGroups[key]; done {
+				continue
+			}
+			updatedGroups[key] = struct{}{}
 			if mergeErr := l.mergeIntoExisting(ctx, eval, p.candidate, p.mergeTarget); mergeErr != nil {
 				l.logWarnErr(mergeErr, "Failed to merge learning artifact")
 			}

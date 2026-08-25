@@ -133,10 +133,20 @@ func (u autoMergeUI) PromptMerge(context.Context, humanreview.LearningCandidate,
 	return u.action, nil
 }
 
-type autoReviewUI struct{ approve bool }
+type autoBatchUI struct{ save bool }
 
-func (u autoReviewUI) PromptApprove(context.Context, *humanreview.LearningArtifact) (bool, error) {
-	return u.approve, nil
+func (u autoBatchUI) PromptBatchSave(context.Context, reviewflow.BatchSaveSummary) (bool, error) {
+	return u.save, nil
+}
+
+type countingBatchUI struct {
+	save  bool
+	calls int
+}
+
+func (u *countingBatchUI) PromptBatchSave(context.Context, reviewflow.BatchSaveSummary) (bool, error) {
+	u.calls++
+	return u.save, nil
 }
 
 type autoAccountUI struct{ action string }
@@ -168,7 +178,7 @@ func TestCompositionLearner_createAndApprove(t *testing.T) {
 		Store:     store,
 		Pack:      pack,
 		MergeUI:   autoMergeUI{action: humanreview.MergeActionCreate},
-		ReviewUI:  autoReviewUI{approve: true},
+		BatchUI:   autoBatchUI{save: true},
 		AccountUI: autoAccountUI{action: humanreview.AccountabilityActionIgnore},
 	})
 	require.NoError(t, err)
@@ -224,12 +234,13 @@ func TestCompositionLearner_createsPerSectionCandidates(t *testing.T) {
 	}
 	learning := &fakeLearningService{}
 	store := &fakeStore{}
+	batch := &countingBatchUI{save: true}
 	learner, err := reviewflow.NewCompositionLearner(reviewflow.CompositionLearnerDeps{
 		Learning: learning,
 		Store:    store,
 		Pack:     pack,
 		MergeUI:  autoMergeUI{action: humanreview.MergeActionCreate},
-		ReviewUI: autoReviewUI{approve: true},
+		BatchUI:  batch,
 	})
 	require.NoError(t, err)
 
@@ -242,6 +253,45 @@ func TestCompositionLearner_createsPerSectionCandidates(t *testing.T) {
 	require.NoError(t, learner.AfterApproval(context.Background(), eval))
 	assert.Len(t, store.created, 2)
 	assert.Equal(t, 2, learning.stored)
+	assert.Equal(t, 1, batch.calls, "one batch confirm for all section demos")
+}
+
+func TestCompositionLearner_batchSkipDoesNotCreate(t *testing.T) {
+	job := humanreview.Job("compose_job")
+	pack := &fakePack{
+		StaticLearningPack: humanreview.NewStaticLearningPack("pipe", job),
+		valid:              true,
+		candidates: []humanreview.LearningCandidate{{
+			Type: humanreview.ArtifactTypeGeneratorExample,
+			Content: map[string]interface{}{
+				"job":  string(job),
+				"step": "compose",
+				"output": map[string]interface{}{
+					"hook": "h",
+				},
+			},
+		}},
+	}
+	learning := &fakeLearningService{}
+	store := &fakeStore{}
+	learner, err := reviewflow.NewCompositionLearner(reviewflow.CompositionLearnerDeps{
+		Learning: learning,
+		Store:    store,
+		Pack:     pack,
+		MergeUI:  autoMergeUI{action: humanreview.MergeActionCreate},
+		BatchUI:  autoBatchUI{save: false},
+	})
+	require.NoError(t, err)
+
+	eval := &humanreview.HumanEvaluation{
+		ID:           uuid.New(),
+		RootEntityID: uuid.New(),
+		Job:          job,
+		Status:       humanreview.StatusReadyForLearning,
+	}
+	require.NoError(t, learner.AfterApproval(context.Background(), eval))
+	assert.Empty(t, store.created)
+	assert.Equal(t, 0, learning.stored)
 }
 
 func TestCompositionLearner_mergeUpdate(t *testing.T) {
