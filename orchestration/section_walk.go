@@ -20,9 +20,11 @@ type SectionFieldRequest struct {
 
 // SectionFieldResponse is the generate+evaluate result for one section attempt.
 type SectionFieldResponse struct {
-	OutputText string
-	Rationale  string
-	Eval       *evaluation.AggregatedEvaluation
+	OutputText     string
+	Rationale      string
+	Eval           *evaluation.AggregatedEvaluation
+	DemoNearID     string
+	DemoContrastID string
 }
 
 // SectionFieldRunner runs generate+evaluate for one section field (app-supplied).
@@ -129,9 +131,11 @@ func (a sectionFieldRunnerAdapter) Run(
 		return nil, nil
 	}
 	return &FieldPhaseResponse{
-		OutputText: resp.OutputText,
-		Rationale:  resp.Rationale,
-		Eval:       resp.Eval,
+		OutputText:     resp.OutputText,
+		Rationale:      resp.Rationale,
+		Eval:           resp.Eval,
+		DemoNearID:     resp.DemoNearID,
+		DemoContrastID: resp.DemoContrastID,
 	}, nil
 }
 

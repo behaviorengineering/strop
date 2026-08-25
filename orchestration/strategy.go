@@ -29,6 +29,11 @@ type IterationOutput struct {
 	OutputState   interface{} // Parsed output to save and to pass as State to the next iteration (or for healing).
 	// EvalPayload is optional; strategy may set it (e.g. *evaluation.AggregatedEvaluation) for SaveVersion to use (CriterionScores, etc.).
 	EvalPayload interface{}
+	// DemoNearID / DemoContrastID are optional learning demo UUIDs from this iteration (RecordDemoUse).
+	DemoNearID     string
+	DemoContrastID string
+	// DemoUses lists all section/phase demo pairs when a version walks multiple fields.
+	DemoUses []FieldDemoUse
 }
 
 // RefinementStrategy is the per-job strategy for the refinement loop.

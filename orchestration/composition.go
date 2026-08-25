@@ -27,6 +27,13 @@ type PhaseResult struct {
 	Passed   bool
 }
 
+// FieldDemoUse is one section/phase demo pair recorded during composition.
+type FieldDemoUse struct {
+	FieldID    string
+	NearID     string
+	ContrastID string
+}
+
 // CompositionResult is the portable handoff after a successful RunCompositionLoop.
 // OutputState and EvalPayload are job-specific (opaque to the loop).
 type CompositionResult struct {
@@ -34,8 +41,9 @@ type CompositionResult struct {
 	Feedback       string
 	OutputState    interface{} // Job-specific assembled draft.
 	EvalPayload    interface{} // Optional; e.g. *evaluation.AggregatedEvaluation.
-	DemoNearID     string      // Optional learning demo UUID used during compose.
+	DemoNearID     string      // Last non-empty near demo (compat); prefer DemoUses.
 	DemoContrastID string
+	DemoUses       []FieldDemoUse // All section/phase demos from this compose.
 }
 
 // CompositionStrategy executes an ordered recipe of phases for one document build.

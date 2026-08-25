@@ -21,9 +21,11 @@ type FieldPhaseRequest struct {
 
 // FieldPhaseResponse is the generate+evaluate result for one field attempt.
 type FieldPhaseResponse struct {
-	OutputText string
-	Rationale  string
-	Eval       *evaluation.AggregatedEvaluation
+	OutputText     string
+	Rationale      string
+	Eval           *evaluation.AggregatedEvaluation
+	DemoNearID     string // Optional learning demo UUID from this attempt.
+	DemoContrastID string
 }
 
 // FieldPhaseRunner runs generate+evaluate for one field (app-supplied).
@@ -69,6 +71,9 @@ type fieldWalkStrategy struct {
 	passedFieldEvals []evaluation.LabeledEval
 	rationales       []string
 	lastFailedOutput string
+	lastDemoNearID   string
+	lastDemoContrast string
+	demoUses         []FieldDemoUse
 }
 
 // NewFieldWalkStrategy builds a CompositionStrategy that walks ordered fields on a string draft.
@@ -159,6 +164,15 @@ func (s *fieldWalkStrategy) RunPhase(
 		if strings.TrimSpace(resp.Rationale) != "" {
 			s.rationales = append(s.rationales, resp.Rationale)
 		}
+		if strings.TrimSpace(resp.DemoNearID) != "" {
+			s.lastDemoNearID = resp.DemoNearID
+			s.lastDemoContrast = resp.DemoContrastID
+			s.demoUses = append(s.demoUses, FieldDemoUse{
+				FieldID:    fieldID,
+				NearID:     resp.DemoNearID,
+				ContrastID: resp.DemoContrastID,
+			})
+		}
 		s.lastFailedOutput = ""
 	} else {
 		s.lastFailedOutput = resp.OutputText
@@ -191,10 +205,13 @@ func (s *fieldWalkStrategy) Result() (*CompositionResult, error) {
 		Scores:    append([]float64(nil), s.fieldScores...),
 	}
 	return &CompositionResult{
-		Score:       agg.WeightedScore,
-		Feedback:    agg.ConsolidatedFeedback,
-		OutputState: st,
-		EvalPayload: agg,
+		Score:          agg.WeightedScore,
+		Feedback:       agg.ConsolidatedFeedback,
+		OutputState:    st,
+		EvalPayload:    agg,
+		DemoNearID:     s.lastDemoNearID,
+		DemoContrastID: s.lastDemoContrast,
+		DemoUses:       append([]FieldDemoUse(nil), s.demoUses...),
 	}, nil
 }
 

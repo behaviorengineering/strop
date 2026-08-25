@@ -16,6 +16,7 @@ const (
 	FieldGeneratorRationale = "generator_rationale"
 	FieldIterationVersion   = "iterationVersion"
 	FieldOriginalText       = "original_text" // Common artifact/generator input key
+	FieldRetrievedGuides    = "retrieved_guides" // Per-call transferable principles from learning store
 
 	// Evaluator output fields.
 	FieldScore           = "score"
