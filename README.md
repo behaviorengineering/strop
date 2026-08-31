@@ -181,6 +181,25 @@ A second app implements the three ports and optionally uses default handlers. Sa
 
 Pending-list exclusion is **app SQL** (omit skipped roots). This app’s adapter is Postgres `youtube.video_job_skips`; CLI cobra/pterm lives in `internal/cli/flow/jobskip`. YouTube first consumer: `pipelines youtube analyze <job> skip|unskip|skipped`.
 
+## Releases (for agents)
+
+Strop is a Go library. Releases are **source tags** (`v*`) plus a GitHub Release from GoReleaser (`builds.skip: true`).
+
+**Auto patch on `main`:** every push to `main` that is not docs/chore/ci-only creates `vX.Y.(Z+1)` and publishes a release (workflow `auto-patch-release.yml`). Put `[skip release]` in the commit subject to opt out once.
+
+**Skip (no tag):** when every commit subject since the last `v*` tag is only `docs:`, `chore:`, or `ci:` (conventional prefixes).
+
+**Manual minor/major:** run workflow **Auto patch release** with `bump=minor` or `bump=major` (or push a `v*` tag yourself). Use major only for breaking public API changes.
+
+**After a new tag, consumer agents (content-pipelines) MUST pin:**
+
+```bash
+git -C providers/strop fetch --tags origin
+git -C providers/strop checkout "vX.Y.Z"
+go get github.com/behaviorengineering/strop@vX.Y.Z
+go mod tidy
+```
+
 ## Not included (yet)
 
 Parked until a second consumer needs them without this repo:
