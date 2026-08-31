@@ -78,6 +78,7 @@ type CriterionDescription struct {
 // CriterionRegistry holds all available evaluation criteria.
 type CriterionRegistry struct {
 	criteria map[CriterionID]CriterionDescription
+	byName   map[string]CriterionID
 }
 
 // NewCriterionRegistry creates a registry with portable/generic criteria only.
@@ -86,6 +87,7 @@ type CriterionRegistry struct {
 func NewCriterionRegistry() *CriterionRegistry {
 	registry := &CriterionRegistry{
 		criteria: make(map[CriterionID]CriterionDescription),
+		byName:   make(map[string]CriterionID),
 	}
 
 	// Register portable criteria (process + shared output quality).
@@ -416,7 +418,23 @@ EDGE CASE:
 
 // Register adds a criterion to the registry.
 func (r *CriterionRegistry) Register(criterion CriterionDescription) {
+	if r.byName == nil {
+		r.byName = make(map[string]CriterionID)
+	}
 	r.criteria[criterion.ID] = criterion
+	r.byName[criterion.Name] = criterion.ID
+}
+
+// GetByName retrieves a criterion by its display name (exact match).
+func (r *CriterionRegistry) GetByName(name string) (CriterionDescription, error) {
+	if r.byName == nil {
+		return CriterionDescription{}, fmt.Errorf("criterion not found by name: %q", name)
+	}
+	id, ok := r.byName[name]
+	if !ok {
+		return CriterionDescription{}, fmt.Errorf("criterion not found by name: %q", name)
+	}
+	return r.Get(id)
 }
 
 // Get retrieves a criterion by ID.
