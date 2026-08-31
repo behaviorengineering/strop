@@ -41,6 +41,33 @@ func TestRepairUnclosedElementTags_StripsIncompleteTrailingTag(t *testing.T) {
 	}
 }
 
+func TestParseOutputs_TruncatedXML_StrictParsingFails(t *testing.T) {
+	parser := NewXMLParser()
+	sig := core.NewSignature(nil, []core.OutputField{
+		{Field: core.Field{Name: "chapter_titles", Description: "XML array (list of items): titles"}},
+		{Field: core.Field{Name: "chapter_start_timestamps", Description: "XML array (list of items): starts"}},
+		{Field: core.Field{Name: "chapter_summaries", Description: "XML array (list of items): summaries"}},
+	})
+	truncated := `<response>
+<chapter_titles><item>One</item><item>Two</item></chapter_titles>
+<chapter_start_timestamps><item>00:00:00</item><item>00:05:00</item></chapter_start_timestamps>
+<chapter_summaries><item>Summary one.</item><item>Summary two without close`
+	_, err := parser.ParseOutputs(context.Background(), map[string]any{
+		"response": truncated,
+	}, sig, XMLConfig{
+		StrictParsing: true,
+		MaxSize:       1024 * 1024,
+		MaxDepth:      15,
+		ParseTimeout:  5 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected truncated XML to fail under StrictParsing")
+	}
+	if !strings.Contains(err.Error(), "XML truncated: missing </response>") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestParseOutputs_TruncatedStoryXML(t *testing.T) {
 	parser := NewXMLParser()
 	sig := core.NewSignature(nil, []core.OutputField{

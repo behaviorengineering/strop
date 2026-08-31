@@ -940,6 +940,9 @@ func (p *XMLParser) parseXML(responseText string, signature core.Signature, conf
 	xmlContent = p.escapeXMLEntities(xmlContent)
 	// Close CDATA sections the model opened but forgot to terminate before </tag>.
 	xmlContent = repairUnclosedCDATA(xmlContent)
+	if config.StrictParsing && !strings.Contains(strings.ToLower(xmlContent), "</response>") {
+		return nil, fmt.Errorf("XML truncated: missing </response>")
+	}
 	// Close still-open tags when the stream ended before </response> (truncated LLM output).
 	xmlContent = repairUnclosedElementTags(xmlContent)
 	// Escape bare "<" inside plain-text field bodies (e.g. "score < 2.0" in directives_ack)
