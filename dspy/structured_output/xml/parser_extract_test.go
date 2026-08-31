@@ -44,3 +44,16 @@ func TestExtractContent_StoriesWrapper(t *testing.T) {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
+
+func TestFindResponseText_PrefersResponseWrapperOverTagMention(t *testing.T) {
+	p := NewXMLParser()
+	ack := `4. Format as nested XML elements within <criterion_scores>.`
+	doc := `<response><directives_ack>ok</directives_ack><criterion_scores><output_quality>2.0</output_quality></criterion_scores></response>`
+	got := p.FindResponseText(map[string]any{
+		"directives_ack": ack,
+		"other":          doc,
+	})
+	if got != doc {
+		t.Fatalf("expected full <response> document, got %q", got)
+	}
+}

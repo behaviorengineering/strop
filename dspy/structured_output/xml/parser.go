@@ -348,6 +348,11 @@ func plainTextFieldNames(signature core.Signature, config XMLConfig) []string {
 		if isMapField(output) || isArrayField(output, config) {
 			continue
 		}
+		// Never angle-sanitize map-shaped score blobs; a CDATA mention of the tag
+		// would otherwise steal the real nested children (see dump preview ending in "]]").
+		if strings.EqualFold(name, "criterion_scores") {
+			continue
+		}
 		if _, dup := seen[name]; dup {
 			continue
 		}
@@ -482,14 +487,14 @@ func sanitizeOnePlainTextField(xmlContent, field string) string {
 	var b strings.Builder
 	remaining := xmlContent
 	for {
-		start := strings.Index(remaining, open)
+		start := indexOutsideCDATA(remaining, open)
 		if start < 0 {
 			b.WriteString(remaining)
 			break
 		}
 		b.WriteString(remaining[:start+len(open)])
 		remaining = remaining[start+len(open):]
-		end := strings.Index(remaining, closeTag)
+		end := indexOutsideCDATA(remaining, closeTag)
 		if end < 0 {
 			b.WriteString(remaining)
 			remaining = ""
@@ -500,6 +505,37 @@ func sanitizeOnePlainTextField(xmlContent, field string) string {
 		b.WriteString(sanitizePlainTextFieldBody(body))
 	}
 	return b.String()
+}
+
+// indexOutsideCDATA returns the index of needle in s, skipping <![CDATA[...]]> regions.
+// Models often restate XML field names inside directives_ack CDATA; those mentions must
+// not be treated as real field boundaries.
+func indexOutsideCDATA(s, needle string) int {
+	if s == "" || needle == "" {
+		return -1
+	}
+	const cdataOpen = "<![CDATA["
+	const cdataClose = "]]>"
+	i := 0
+	for i < len(s) {
+		next := strings.Index(s[i:], needle)
+		if next < 0 {
+			return -1
+		}
+		abs := i + next
+		cdata := strings.Index(s[i:], cdataOpen)
+		if cdata >= 0 && i+cdata < abs {
+			afterOpen := i + cdata + len(cdataOpen)
+			closeIdx := strings.Index(s[afterOpen:], cdataClose)
+			if closeIdx < 0 {
+				return -1
+			}
+			i = afterOpen + closeIdx + len(cdataClose)
+			continue
+		}
+		return abs
+	}
+	return -1
 }
 
 func sanitizePlainTextFieldBody(body string) string {
@@ -676,14 +712,23 @@ func (p *XMLParser) FindResponseText(outputs map[string]any) string {
 		}
 	}
 
-	// Fallback: look for any string value that contains XML content.
+	// Prefer a full <response> document over a field fragment that happens to
+	// mention tags (e.g. directives_ack restating "<criterion_scores>").
+	var withAngles string
 	for _, value := range outputs {
-		if textStr, ok := value.(string); ok && textStr != "" {
-			// Check if this string contains XML-like content.
-			if strings.Contains(textStr, "<") && strings.Contains(textStr, ">") {
-				return textStr
-			}
+		textStr, ok := value.(string)
+		if !ok || strings.TrimSpace(textStr) == "" {
+			continue
 		}
+		if strings.Contains(strings.ToLower(textStr), "<response") {
+			return textStr
+		}
+		if withAngles == "" && strings.Contains(textStr, "<") && strings.Contains(textStr, ">") {
+			withAngles = textStr
+		}
+	}
+	if withAngles != "" {
+		return withAngles
 	}
 
 	// Final fallback: use first non-empty string value.
