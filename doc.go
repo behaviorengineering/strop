@@ -20,7 +20,7 @@
 // LearningService/LearningStore, ItemObjectiveStore; product jobpacks register
 // in the app), humanreview/reviewflow (engine + Prompter/Generator/Session/Learner
 // ports), jobskip (Store + Restore) with Labeler/Selector ports; pending-list
-// exclusion is app SQL.
+// exclusion is app SQL; concurrency (adaptive in-flight limiter, RunPool).
 //
 // Not included: learning Postgres/Meilisearch adapters, pterm classroom UX,
 // product document-arc / document-section recipes (strop types are ready; app

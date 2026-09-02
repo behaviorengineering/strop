@@ -16,6 +16,7 @@ import (
     "github.com/behaviorengineering/strop/humanreview"
     "github.com/behaviorengineering/strop/humanreview/reviewflow"
     "github.com/behaviorengineering/strop/jobskip"
+    "github.com/behaviorengineering/strop/concurrency"
 )
 ```
 
@@ -44,6 +45,7 @@ import (
 | `humanreview` | Gate, FeedbackNormalizer, ScoreProposer, stored-feedback helpers, LearningService / LearningStore |
 | `humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
 | `jobskip` | Per-job generate-queue skip Store + Restore (Labeler / Selector ports) |
+| `concurrency` | Adaptive in-flight limiter and `RunPool` for parallel independent LLM units |
 
 ## Boundary rules
 
