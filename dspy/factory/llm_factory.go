@@ -61,6 +61,9 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	if apiSchema == "" {
 		return nil, fmt.Errorf("api_schema is required - must be explicitly set in configuration")
 	}
+	if provider.Thinking && apiSchema != "openai" {
+		return nil, fmt.Errorf("thinking mode currently requires an OpenAI-compatible provider")
+	}
 
 	// Resolve provider timeout (defaults to module timeout if not set).
 	providerTimeout := provider.GetTimeout(f.moduleTimeout)
@@ -99,6 +102,15 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	llmInstance, err := registry.CreateLLMWithConfig(ctx, providerConfig, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create LLM with API schema %s: %w", apiSchema, err)
+	}
+	if provider.Thinking {
+		httpLLM, ok := llmInstance.(httpClientGetter)
+		if !ok {
+			return nil, fmt.Errorf("LLM does not expose an HTTP client")
+		}
+		if err := configureThinkingTransport(httpLLM); err != nil {
+			return nil, fmt.Errorf("failed to configure thinking mode: %w", err)
+		}
 	}
 	f.instrumentLLMHTTPClient(llmInstance)
 
