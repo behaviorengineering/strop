@@ -21,6 +21,7 @@ type ProviderConfig struct {
 	APISchema        string
 	MaxContextTokens int
 	MaxOutputTokens  int
+	Thinking         bool
 	Grounding        *GroundingConfig
 }
 

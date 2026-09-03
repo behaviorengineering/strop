@@ -1,6 +1,6 @@
 module github.com/behaviorengineering/strop
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/XiaoConstantine/dspy-go v0.86.1
