@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -127,29 +128,41 @@ func parseCriterionScores(value interface{}, expectedCriterionIDs map[string]str
 			}
 		}
 
-		var score float64
-		switch v := scoreValue.(type) {
-		case float64:
-			score = v
-		case float32:
-			score = float64(v)
-		case int64:
-			score = float64(v)
-		case int32:
-			score = float64(v)
-		case int:
-			score = float64(v)
-		case string:
-			if _, err := fmt.Sscanf(v, "%f", &score); err != nil {
-				return nil, fmt.Errorf("invalid score format for criterion %s: %q", criterionID, v)
-			}
-		default:
-			return nil, fmt.Errorf("score for criterion %s has invalid type: %T (expected float64, int64, int, or string)", criterionID, scoreValue)
+		score, err := parseNumericCriterionScore(scoreValue)
+		if err != nil {
+			return nil, fmt.Errorf("invalid score format for criterion %s: %w", criterionID, err)
 		}
 		result[criterionID] = score
 	}
 
 	return result, nil
+}
+
+func parseNumericCriterionScore(scoreValue interface{}) (float64, error) {
+	switch v := scoreValue.(type) {
+	case float64:
+		return v, nil
+	case float32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int:
+		return float64(v), nil
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0, fmt.Errorf("%q (scores must be plain decimals like 0.0, 1.0, 2.0; not checklist marks)", v)
+		}
+		score, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil {
+			return 0, fmt.Errorf("%q (scores must be plain decimals like 0.0, 1.0, 2.0; not checklist marks)", v)
+		}
+		return score, nil
+	default:
+		return 0, fmt.Errorf("score has invalid type: %T (expected float64, int64, int, or string)", scoreValue)
+	}
 }
 
 // normalizeScoreFromCriteria calculates a normalized total score (0-10) from individual criterion scores.

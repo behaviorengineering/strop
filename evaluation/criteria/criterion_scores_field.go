@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	criterionScoresDescBase = "Map of individual criterion scores. Each key is a criterion ID and each value is the score (0.0 to max_points). Scores MUST align with the feedback provided"
+	criterionScoresDescBase = "Map of individual criterion scores. Each key is a criterion ID and each value is a plain decimal number from 0.0 to max_points (examples: 0.0, 1.0, 2.0). Never use checklist marks (., ✓, [✓], [ ], ./.) as scores. Scores MUST align with the feedback provided"
 	exactMapKeysMarker      = "Exact map keys:"
 )
 

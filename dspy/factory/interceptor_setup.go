@@ -2,6 +2,7 @@ package factory
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	stropdspy "github.com/behaviorengineering/strop/dspy"
@@ -280,6 +281,9 @@ func stripDSPyXMLInterceptor(module core.InterceptableModule, xmlAlreadyEnabled 
 func (s *InterceptorSetup) addValidationInterceptor(module core.InterceptableModule, interceptorsList *[]core.ModuleInterceptor) {
 	moduleName := interceptableDisplayName(module)
 	validator := stropvalidation.ValidateMandatoryFields(nil)
+	if strings.HasSuffix(moduleName, "Score Generation") {
+		validator = stropvalidation.ValidateCriterionScoresNumeric
+	}
 	if s != nil && s.outputValidators != nil {
 		if registered, ok := s.outputValidators[moduleName]; ok && registered != nil {
 			validator = registered
