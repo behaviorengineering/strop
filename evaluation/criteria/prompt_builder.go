@@ -364,8 +364,8 @@ func (pb *PromptBuilder) buildProcessSection() string {
    - Write this critical analysis to directives_ack — this is your working memory for scoring (do NOT invent a generator rationale field)
    - Based on this critical analysis, assign a score (0.0 to max_points) that reflects the feedback needed
    - Example directives_ack structure:
-     "Instruction Compliance: Critical analysis - [what feedback would be given, specific issues or strengths found]. Based on this analysis, Score: 2.0/2.0 because [reasoning]...
-      Completeness: Critical analysis - [what feedback would be given, specific issues or strengths found]. Based on this analysis, Score: 2.0/2.0 because [reasoning]...
+     "Instruction Compliance: Critical analysis - [what feedback would be given, specific issues or strengths found]. Based on this analysis, Score: 2.0 because [reasoning]...
+      Completeness: Critical analysis - [what feedback would be given, specific issues or strengths found]. Based on this analysis, Score: 2.0 because [reasoning]...
       [Continue for all criteria with critical feedback analysis and score for each]"
 
 4. **FEEDBACK GENERATION PHASE**: Generate feedback output based on the critical analysis in directives_ack
@@ -411,7 +411,7 @@ func (pb *PromptBuilder) buildScoreBreakdownFormat(criteria []CriterionDescripti
 		if crit.ID == CriterionIDFeedbackAdherence {
 			optionalNote = " (if applicable)"
 		}
-		sb.WriteString(fmt.Sprintf("- %s: {points}/%.0f - [brief explanation]%s\n", crit.Name, crit.MaxPoints, optionalNote))
+		sb.WriteString(fmt.Sprintf("- %s: {points} of %.0f max - [brief explanation]%s\n", crit.Name, crit.MaxPoints, optionalNote))
 	}
 
 	return sb.String()
@@ -572,21 +572,27 @@ Your role is to assign criterion scores based on the feedback analysis provided.
 
 [Section 4] SCORING PROCESS:
 1. Review the feedback provided by the feedback analysis module
-2. For EACH criterion, check if the feedback identifies any issues:
-   - If feedback identifies issues for a criterion → score MUST be < 2.0/2.0 (use 1.0/2.0 for minor issues, 0.0/2.0 for major issues)
-   - If feedback says "no issues" or is positive/affirmative for a criterion → score CAN be 2.0/2.0
-   - If feedback is silent about a criterion and output appears perfect → score CAN be 2.0/2.0
+2. For EACH criterion, check if the feedback identifies any issues (most criteria max = 2.0):
+   - Issues found → score MUST be below max (1.0 for minor issues, 0.0 for major issues)
+   - Feedback is positive / "no issues" / [✓] for that criterion → score the full max (2.0)
+   - Feedback is silent about a criterion and output appears perfect → score the full max (2.0)
 3. Assign scores that accurately reflect the severity of issues identified in the feedback
 
 [Section 5] CRITICAL RULE:
-- If feedback contains ANY "still needs work" items, "NEW" items, "CONSTRAINTS", or "ACTIONABLE STEPS" → the corresponding criteria MUST have scores < 2.0/2.0
-- If feedback is ONLY positive affirmation with no improvement items → all criteria can score 2.0/2.0
+- If feedback contains ANY "still needs work" items, "NEW" items, "CONSTRAINTS", or "ACTIONABLE STEPS" → the corresponding criteria MUST score below max
+- If feedback is ONLY positive affirmation with no improvement items → every criterion score is the full max (2.0)
 
 [Section 6] OUTPUT FORMAT:
-- Output criterion_scores map with all required criterion IDs
-- Each score value MUST be a plain decimal number only (examples: 0.0, 1.0, 2.0)
-- NEVER use ".", "✓", "[✓]", "[ ]", "./.", checkmarks, slashes, or other checklist punctuation as a score
-- NEVER copy feedback checklist marks into criterion_scores; checklist syntax belongs only in the feedback field
+- Output criterion_scores with all required criterion IDs from Section 3
+- Each value MUST be a plain decimal number only (0.0, 1.0, or 2.0 for a 2.0-max criterion)
+- Map feedback [✓] / "no issues" / positive affirmation → 2.0. NEVER map [✓] to ".", "./.", or a checkmark
+- Map open [ ] / needs-work → 0.0 or 1.0 (never punctuation)
+- NEVER use ".", "✓", "[✓]", "[ ]", "./.", slashes, ratios like "2/2", or other checklist punctuation as a score value
+- Example shape (use the exact criterion IDs from Section 3; values are decimals):
+  <criterion_scores>
+    <instruction_compliance><![CDATA[2.0]]></instruction_compliance>
+    <completeness><![CDATA[2.0]]></completeness>
+  </criterion_scores>
 - Scores MUST align with the feedback provided
 - Document scoring attention in directives_ack (not a separate rationale field)`
 
