@@ -57,4 +57,16 @@ func TestScoreGenerationPromptBase_RequiresPlainDecimals(t *testing.T) {
 	if !strings.Contains(ScoreGenerationPromptBase, "checklist") {
 		t.Fatalf("ScoreGenerationPromptBase missing checklist-ban rule")
 	}
+	if strings.Contains(ScoreGenerationPromptBase, "2.0/2.0") {
+		t.Fatalf("ScoreGenerationPromptBase must not teach slash score shapes like 2.0/2.0")
+	}
+	if strings.Contains(ScoreGenerationPromptBase, "assign ./.") {
+		t.Fatalf("ScoreGenerationPromptBase must not instruct assigning ./.")
+	}
+	if !strings.Contains(ScoreGenerationPromptBase, "<![CDATA[2.0]]>") {
+		t.Fatalf("ScoreGenerationPromptBase missing decimal XML example")
+	}
+	if !strings.Contains(ScoreGenerationPromptBase, "Map feedback [✓]") {
+		t.Fatalf("ScoreGenerationPromptBase missing [✓]→2.0 mapping rule")
+	}
 }

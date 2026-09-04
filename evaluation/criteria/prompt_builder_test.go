@@ -65,7 +65,7 @@ func TestPromptBuilder_GeneratesPromptFromRegistry(t *testing.T) {
 		},
 		{
 			name:     "Score Breakdown",
-			contains: "Instruction Compliance: {points}/2",
+			contains: "Instruction Compliance: {points} of 2 max",
 			desc:     "Should generate score breakdown from registry names and max points",
 		},
 		{
