@@ -142,16 +142,21 @@ func (r *JobRunner) GenerateResult(
 	input GeneratorInput,
 	eventChan streaming.EventChannel,
 ) (*GenerationResult, error) {
+	if input == nil {
+		return nil, newGenerationError(config, "generator input is nil", nil)
+	}
 	gen, err := r.registry.GetGenerator(config.ModuleName)
 	if err != nil {
 		msg := fmt.Sprintf("%s not initialized", config.ErrorMessage)
 		if strings.Contains(err.Error(), "not found") {
 			msg += " (check config: job_configs.<task>.modules.generator and ai_providers; see startup logs for skip reason)"
 		}
-		return nil, fmt.Errorf("%s: %w", msg, err)
+		return nil, newGenerationError(config, msg, err)
 	}
 	if _, err := dspymodules.PredictOf(gen.Module); err != nil {
-		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("%s is not a Predict-backed generator module", config.ErrorMessage),
+		return nil, newGenerationError(
+			config,
+			fmt.Sprintf("%s is not a Predict-backed generator module", config.ErrorMessage),
 			err,
 		)
 	}
@@ -190,7 +195,9 @@ func (r *JobRunner) GenerateResult(
 		eventChan <- gen.EndEvent(outputs, err)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("Failed to generate %s", config.ErrorMessage),
+		return nil, newGenerationError(
+			config,
+			fmt.Sprintf("Failed to generate %s", config.ErrorMessage),
 			stropdspy.SanitizeDSPyError(err),
 		)
 	}
@@ -206,16 +213,20 @@ func (r *JobRunner) EvaluateWorkflow(
 	eventChan streaming.EventChannel,
 ) (*evaluation.AggregatedEvaluation, error) {
 	if generatorInput == nil {
-		return nil, fmt.Errorf("%s", fmt.Sprintf("evaluation input is nil for %s", job))
+		return nil, newEvaluationError(job, "evaluation input is nil", nil)
 	}
 	inputs := buildEvaluationInputs(generatorInput, generatorOutput)
 	workflow, err := r.registry.GetWorkflow(job)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("Failed to get %s evaluation workflow", job), err)
+		return nil, newEvaluationError(job, "evaluation workflow is not initialized", err)
 	}
 	result, err := workflow.EvaluateStream(ctx, inputs, eventChan)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fmt.Sprintf("Failed to evaluate %s", job), stropdspy.SanitizeDSPyError(err))
+		return nil, newEvaluationError(
+			job,
+			"evaluation failed",
+			stropdspy.SanitizeDSPyError(err),
+		)
 	}
 	return result, nil
 }
