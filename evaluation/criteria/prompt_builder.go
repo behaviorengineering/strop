@@ -583,7 +583,10 @@ Your role is to assign criterion scores based on the feedback analysis provided.
 - If feedback is ONLY positive affirmation with no improvement items → all criteria can score 2.0/2.0
 
 [Section 6] OUTPUT FORMAT:
-- Output criterion_scores map with all scores
+- Output criterion_scores map with all required criterion IDs
+- Each score value MUST be a plain decimal number only (examples: 0.0, 1.0, 2.0)
+- NEVER use ".", "✓", "[✓]", "[ ]", "./.", checkmarks, slashes, or other checklist punctuation as a score
+- NEVER copy feedback checklist marks into criterion_scores; checklist syntax belongs only in the feedback field
 - Scores MUST align with the feedback provided
 - Document scoring attention in directives_ack (not a separate rationale field)`
 

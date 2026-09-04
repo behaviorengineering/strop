@@ -3,6 +3,8 @@ package validation
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/behaviorengineering/strop/dspy/rawresponse"
@@ -157,6 +159,78 @@ func validateMandatoryFieldList(fieldsToValidate []string, outputs map[string]an
 	}
 
 	return nil
+}
+
+// ValidateCriterionScoresNumeric ensures criterion_scores is present and every value is a plain decimal number.
+// Checklist punctuation (".", "✓", "[✓]") must fail so RetryModuleInterceptor can re-run Score Generation.
+func ValidateCriterionScoresNumeric(ctx context.Context, inputs map[string]any, outputs map[string]any, info *core.ModuleInfo) error {
+	_ = ctx
+	_ = inputs
+	_ = info
+	if err := validateMandatoryFieldList([]string{"criterion_scores"}, outputs); err != nil {
+		return err
+	}
+	return ValidateCriterionScoreValues(outputs["criterion_scores"])
+}
+
+// ValidateCriterionScoreValues checks that criterion_scores values are numeric (float or decimal string).
+func ValidateCriterionScoreValues(value any) error {
+	if value == nil {
+		return fmt.Errorf("criterion_scores is nil")
+	}
+	scoresMap, ok := value.(map[string]any)
+	if !ok {
+		// Accept map[string]interface{} via conversion when needed.
+		if legacy, legacyOK := value.(map[string]interface{}); legacyOK {
+			scoresMap = make(map[string]any, len(legacy))
+			for k, v := range legacy {
+				scoresMap[k] = v
+			}
+		} else {
+			return fmt.Errorf("criterion_scores has invalid type %T (expected map)", value)
+		}
+	}
+	if len(scoresMap) == 0 {
+		return fmt.Errorf("criterion_scores is empty")
+	}
+	var invalid []string
+	for criterionID, scoreValue := range scoresMap {
+		if _, err := parseNumericScore(scoreValue); err != nil {
+			invalid = append(invalid, fmt.Sprintf("%s=%q", criterionID, fmt.Sprint(scoreValue)))
+		}
+	}
+	if len(invalid) == 0 {
+		return nil
+	}
+	sort.Strings(invalid)
+	return fmt.Errorf("criterion_scores must be plain decimal numbers (not checklist marks); invalid: [%s]", strings.Join(invalid, ", "))
+}
+
+func parseNumericScore(scoreValue any) (float64, error) {
+	switch v := scoreValue.(type) {
+	case float64:
+		return v, nil
+	case float32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int:
+		return float64(v), nil
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0, fmt.Errorf("empty score")
+		}
+		score, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil {
+			return 0, err
+		}
+		return score, nil
+	default:
+		return 0, fmt.Errorf("invalid type %T", scoreValue)
+	}
 }
 
 // ValidateFeedbackField is a specific validator that ensures the feedback field exists and is not empty.

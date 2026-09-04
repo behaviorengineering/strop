@@ -51,6 +51,41 @@ func TestValidationInterceptor_PreservesResultOnHandlerError(t *testing.T) {
 	}
 }
 
+func TestValidateCriterionScoresNumeric_RejectsChecklistDot(t *testing.T) {
+	t.Parallel()
+	info := &core.ModuleInfo{ModuleName: "process_evaluator - Score Generation"}
+	err := validation.ValidateCriterionScoresNumeric(context.Background(), nil, map[string]any{
+		"criterion_scores": map[string]any{
+			"instruction_compliance": ".",
+			"completeness":           "2.0",
+		},
+		"directives_ack": "ok",
+	}, info)
+	if err == nil {
+		t.Fatal("expected validation error for checklist-dot scores")
+	}
+	if !strings.Contains(err.Error(), "plain decimal numbers") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "instruction_compliance") {
+		t.Fatalf("expected criterion id in error: %v", err)
+	}
+}
+
+func TestValidateCriterionScoresNumeric_AcceptsDecimals(t *testing.T) {
+	t.Parallel()
+	info := &core.ModuleInfo{ModuleName: "process_evaluator - Score Generation"}
+	err := validation.ValidateCriterionScoresNumeric(context.Background(), nil, map[string]any{
+		"criterion_scores": map[string]any{
+			"instruction_compliance": "2.0",
+			"completeness":           1.0,
+		},
+	}, info)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestValidateMandatoryFields_DedupesDuplicateOutputNames ensures duplicate field names
 // in Signature.Outputs only produce one validation pass per map key (no "rationale rationale" in errors).
 func TestValidateMandatoryFields_DedupesDuplicateOutputNames(t *testing.T) {

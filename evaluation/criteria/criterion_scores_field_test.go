@@ -36,6 +36,9 @@ func TestCriterionScoresOutputDescription_includesExactMapKeys(t *testing.T) {
 	if !strings.Contains(desc, exactMapKeysMarker+" instruction_compliance, completeness.") {
 		t.Fatalf("unexpected description: %q", desc)
 	}
+	if !strings.Contains(desc, "plain decimal number") {
+		t.Fatalf("expected numeric score guidance in description: %q", desc)
+	}
 }
 
 func TestCriterionScoresOutputDescription_emptyIDsOmitsExactKeys(t *testing.T) {
@@ -43,5 +46,15 @@ func TestCriterionScoresOutputDescription_emptyIDsOmitsExactKeys(t *testing.T) {
 	desc := CriterionScoresOutputDescription(nil)
 	if strings.Contains(desc, exactMapKeysMarker) {
 		t.Fatalf("expected no exact map keys marker, got %q", desc)
+	}
+}
+
+func TestScoreGenerationPromptBase_RequiresPlainDecimals(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(ScoreGenerationPromptBase, "plain decimal number") {
+		t.Fatalf("ScoreGenerationPromptBase missing numeric score rule")
+	}
+	if !strings.Contains(ScoreGenerationPromptBase, "checklist") {
+		t.Fatalf("ScoreGenerationPromptBase missing checklist-ban rule")
 	}
 }
