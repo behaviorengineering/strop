@@ -34,7 +34,9 @@ func RunRefinementLoop(
 	}
 	meta := runreport.ResolveMeta(strategy, entityID.String(), loopCtx.NextVersion)
 	ctx, finishReport := runreport.StartSession(ctx, cfg, meta)
-	defer finishReport(err)
+	defer func() {
+		finishReport(err)
+	}()
 
 	previousScore := -1.0
 	if loopCtx.InitialPreviousScore != nil {
@@ -199,7 +201,9 @@ func RunPerItemRefinementLoopWithIndices(
 	}
 	meta := runreport.ResolveMeta(strategy, entityID.String(), loopCtx.NextVersion)
 	ctx, finishReport := runreport.StartSession(ctx, cfg, meta)
-	defer finishReport(err)
+	defer func() {
+		finishReport(err)
+	}()
 
 	state := loopCtx.State
 	n := strategy.ItemCount(state)

@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -455,7 +456,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 ) ([]*evaluation.IndividualEvaluation, error) {
 	// Create channel for collecting results.
 	results := make(chan *evaluation.IndividualEvaluation, len(w.evaluators))
-	errors := make(chan error, len(w.evaluators))
+	errorCh := make(chan error, len(w.evaluators))
 
 	// Launch goroutine for each evaluator.
 	var wg sync.WaitGroup
@@ -467,13 +468,13 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 			// Check context cancellation before expensive operation.
 			select {
 			case <-ctx.Done():
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
 				return
 			default:
 			}
 
 			if evaluator.Module == nil {
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s has nil module", roleKey))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s has nil module", roleKey))
 				return
 			}
 
@@ -488,12 +489,12 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 				} else {
 					sanitizedErr = err
 				}
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s failed: %w", roleKey, sanitizedErr))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s failed: %w", roleKey, sanitizedErr))
 				return
 			}
 
 			if result == nil {
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s returned nil result", roleKey))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s returned nil result", roleKey))
 				return
 			}
 
@@ -512,7 +513,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 					"result_keys": getMapKeys(result),
 					"error":       err,
 				}).Error("Failed to parse evaluator result")
-				sendOrCancel(ctx, errors, fmt.Errorf("failed to parse result from %s: %w", roleKey, err))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("failed to parse result from %s: %w", roleKey, err))
 				return
 			}
 
@@ -521,7 +522,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 			if !sendOrCancel(ctx, results, individualEval) {
 				// Ctx cancel after success must not look like "no evaluators returned results".
 				select {
-				case errors <- fmt.Errorf("evaluator %s cancelled after success: %w", roleKey, ctx.Err()):
+				case errorCh <- fmt.Errorf("evaluator %s cancelled after success: %w", roleKey, ctx.Err()):
 				default:
 				}
 				return
@@ -532,7 +533,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 	// Wait for all goroutines to complete, then close channels.
 	wg.Wait()
 	close(results)
-	close(errors)
+	close(errorCh)
 
 	// Collect results and errors.
 	var individualEvals []*evaluation.IndividualEvaluation
@@ -542,7 +543,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 		individualEvals = append(individualEvals, eval)
 	}
 
-	for err := range errors {
+	for err := range errorCh {
 		errs = append(errs, err)
 	}
 
@@ -558,13 +559,9 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluators(
 			"total_expected": totalExpected,
 		}).Error("Evaluation failed: some evaluators failed - failing fast to ensure complete evaluation")
 
-		// Use %w for the first error to preserve unwrapping, %v for others.
+		// Join every evaluator failure so errors.Is and errors.As can inspect all causes.
 		msg := fmt.Sprintf("evaluation failed: %d of %d evaluators failed", failureCount, totalExpected)
-		if failureCount == 1 {
-			return nil, fmt.Errorf("%s: %w", msg, errs[0])
-		}
-		// For multiple errors, wrap the first and mention the count.
-		return nil, fmt.Errorf("%s: %w (and %d more)", msg, errs[0], failureCount-1)
+		return nil, fmt.Errorf("%s: %w", msg, errors.Join(errs...))
 	}
 
 	// Validate we have at least one result (should always be true if no errors).
@@ -583,7 +580,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 ) ([]*evaluation.IndividualEvaluation, error) {
 	// Create channel for collecting results.
 	results := make(chan *evaluation.IndividualEvaluation, len(w.evaluators))
-	errors := make(chan error, len(w.evaluators))
+	errorCh := make(chan error, len(w.evaluators))
 
 	var wg sync.WaitGroup
 	for roleKey, evaluator := range w.evaluators {
@@ -594,19 +591,19 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 			select {
 			case eventChan <- evaluator.StartEvent():
 			case <-ctx.Done():
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
 				return
 			}
 
 			select {
 			case <-ctx.Done():
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
 				return
 			default:
 			}
 
 			if evaluator.Module == nil {
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s has nil module", roleKey))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s has nil module", roleKey))
 				return
 			}
 
@@ -628,12 +625,12 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 				} else {
 					sanitizedErr = err
 				}
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s failed: %w", roleKey, sanitizedErr))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s failed: %w", roleKey, sanitizedErr))
 				return
 			}
 
 			if result == nil {
-				sendOrCancel(ctx, errors, fmt.Errorf("evaluator %s returned nil result", roleKey))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s returned nil result", roleKey))
 				return
 			}
 
@@ -652,7 +649,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 					"result_keys": getMapKeys(result),
 					"error":       err,
 				}).Error("Failed to parse evaluator result")
-				sendOrCancel(ctx, errors, fmt.Errorf("failed to parse result from %s: %w", roleKey, err))
+				sendOrCancel(ctx, errorCh, fmt.Errorf("failed to parse result from %s: %w", roleKey, err))
 				return
 			}
 
@@ -661,7 +658,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 			if !sendOrCancel(ctx, results, individualEval) {
 				// Ctx cancel after success must not look like "no evaluators returned results".
 				select {
-				case errors <- fmt.Errorf("evaluator %s cancelled after success: %w", roleKey, ctx.Err()):
+				case errorCh <- fmt.Errorf("evaluator %s cancelled after success: %w", roleKey, ctx.Err()):
 				default:
 				}
 				return
@@ -672,7 +669,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 	// Wait for all goroutines to complete, then close channels.
 	wg.Wait()
 	close(results)
-	close(errors)
+	close(errorCh)
 
 	// Collect results and errors.
 	var individualEvals []*evaluation.IndividualEvaluation
@@ -682,7 +679,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 		individualEvals = append(individualEvals, eval)
 	}
 
-	for err := range errors {
+	for err := range errorCh {
 		errs = append(errs, err)
 	}
 
@@ -699,10 +696,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 		}).Error("Evaluation failed: some evaluators failed - failing fast to ensure complete evaluation")
 
 		msg := fmt.Sprintf("evaluation failed: %d of %d evaluators failed", failureCount, totalExpected)
-		if failureCount == 1 {
-			return nil, fmt.Errorf("%s: %w", msg, errs[0])
-		}
-		return nil, fmt.Errorf("%s: %w (and %d more)", msg, errs[0], failureCount-1)
+		return nil, fmt.Errorf("%s: %w", msg, errors.Join(errs...))
 	}
 
 	// Validate we have at least one result.
