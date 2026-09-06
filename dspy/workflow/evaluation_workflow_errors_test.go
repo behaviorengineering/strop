@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/behaviorengineering/strop/dspy/actor"
 	"github.com/behaviorengineering/strop/evaluation"
@@ -81,5 +82,35 @@ func TestRunIndividualEvaluatorsPreservesAllFailures(t *testing.T) {
 	}
 	if !errors.Is(err, processErr) {
 		t.Fatal("expected process evaluator cause to remain discoverable")
+	}
+}
+
+func TestRunIndividualEvaluatorsStreamNilEventChanDoesNotHang(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("style evaluator failed")
+	workflow := &ParallelEvaluationWorkflow{
+		evaluators: map[evaluation.EvaluatorKey]actor.Evaluator{
+			"style": {Key: "style", Module: &failingModule{err: boom}},
+		},
+		logger: noopWorkflowLogger{},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := workflow.runIndividualEvaluatorsStream(context.Background(), nil, nil)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected evaluator failure")
+		}
+		if !errors.Is(err, boom) {
+			t.Fatalf("expected boom cause, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runIndividualEvaluatorsStream hung with nil eventChan")
 	}
 }

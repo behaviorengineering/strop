@@ -220,7 +220,14 @@ func (r *JobRunner) EvaluateWorkflow(
 	if err != nil {
 		return nil, newEvaluationError(job, "evaluation workflow is not initialized", err)
 	}
-	result, err := workflow.EvaluateStream(ctx, inputs, eventChan)
+	// Nil eventChan means headless evaluate (CLI / digest). Prefer the non-stream
+	// path; EvaluateStream also tolerates nil, but Evaluate avoids stream wiring.
+	var result *evaluation.AggregatedEvaluation
+	if eventChan == nil {
+		result, err = workflow.Evaluate(ctx, inputs)
+	} else {
+		result, err = workflow.EvaluateStream(ctx, inputs, eventChan)
+	}
 	if err != nil {
 		return nil, newEvaluationError(
 			job,

@@ -216,6 +216,21 @@ func sendOrCancel[T any](ctx context.Context, ch chan<- T, value T) bool {
 	}
 }
 
+// emitInferenceEvent sends an inference event when a stream channel is present.
+// A nil channel is a no-op (EvaluateWorkflow callers often pass nil). Sending on a
+// nil Go channel would block forever.
+func emitInferenceEvent(ctx context.Context, eventChan streaming.EventChannel, event streaming.InferenceEvent) error {
+	if eventChan == nil {
+		return nil
+	}
+	select {
+	case eventChan <- event:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // Evaluate runs all evaluators in parallel, then consolidates their feedback.
 func (w *ParallelEvaluationWorkflow) Evaluate(
 	ctx context.Context,
@@ -601,10 +616,8 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 		go func(roleKey evaluation.EvaluatorKey, evaluator actor.Evaluator) {
 			defer wg.Done()
 
-			select {
-			case eventChan <- evaluator.StartEvent():
-			case <-ctx.Done():
-				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s cancelled: %w", roleKey, ctx.Err()))
+			if err := emitInferenceEvent(ctx, eventChan, evaluator.StartEvent()); err != nil {
+				sendOrCancel(ctx, errorCh, fmt.Errorf("evaluator %s cancelled: %w", roleKey, err))
 				return
 			}
 
@@ -626,10 +639,7 @@ func (w *ParallelEvaluationWorkflow) runIndividualEvaluatorsStream(
 			handler := evaluator.StreamHandler(eventChan)
 			result, err := evaluator.Process(workerCtx, inputs, core.WithStreamHandler(handler))
 
-			select {
-			case eventChan <- evaluator.EndEvent(result, err):
-			case <-ctx.Done():
-			}
+			_ = emitInferenceEvent(ctx, eventChan, evaluator.EndEvent(result, err))
 
 			if err != nil {
 				var sanitizedErr error
@@ -1024,10 +1034,8 @@ func (w *ParallelEvaluationWorkflow) consolidateFeedbacksStream(
 		return "", fmt.Errorf("%s", "consolidator not initialized")
 	}
 
-	select {
-	case eventChan <- w.consolidator.StartEvent():
-	case <-ctx.Done():
-		return "", ctx.Err()
+	if err := emitInferenceEvent(ctx, eventChan, w.consolidator.StartEvent()); err != nil {
+		return "", err
 	}
 
 	consolidatorInputs := w.buildConsolidatorInputs(individualEvals, agentScores, weightedScore, contentVersion)
@@ -1040,10 +1048,7 @@ func (w *ParallelEvaluationWorkflow) consolidateFeedbacksStream(
 		core.WithStreamHandler(handler),
 	)
 
-	select {
-	case eventChan <- w.consolidator.EndEvent(result, err):
-	case <-ctx.Done():
-	}
+	_ = emitInferenceEvent(ctx, eventChan, w.consolidator.EndEvent(result, err))
 
 	if err != nil {
 		return "", err
