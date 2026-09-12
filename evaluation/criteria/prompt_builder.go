@@ -839,6 +839,7 @@ func (pb *PromptBuilder) buildForbiddenPatternsReference(criteria []CriterionDes
 	hasNoTherapistVoice := false
 	hasInsiderPerspective := false
 	hasAntiAIFeel := false
+	hasNoAphorismStack := false
 
 	for _, crit := range criteria {
 		switch crit.ID {
@@ -852,6 +853,8 @@ func (pb *PromptBuilder) buildForbiddenPatternsReference(criteria []CriterionDes
 			hasInsiderPerspective = true
 		case CriterionIDAntiAIFeel:
 			hasAntiAIFeel = true
+		case CriterionIDNoAphorismStack:
+			hasNoAphorismStack = true
 		}
 	}
 
@@ -886,6 +889,12 @@ func (pb *PromptBuilder) buildForbiddenPatternsReference(criteria []CriterionDes
 		sb.WriteString("Framing Devices (Anti-AI):\n")
 		sb.WriteString(`❌ "That's the vibe of...", "Think of it as...", "It's perfect for...", "Here's what that means:", "In other words:"` + "\n")
 		sb.WriteString("✅ Start directly, skip the setup\n\n")
+	}
+
+	if hasNoAphorismStack {
+		sb.WriteString("Aphorism Stacks (No Aphorism Stack):\n")
+		sb.WriteString(`❌ Parallel Loud/Quiet couplets, semicolon aphorisms ("Stress drains; purpose concentrates."), metaphor restacks that only relabel the prior claim` + "\n")
+		sb.WriteString("✅ Next sentence adds a scene, fact, or mechanism\n\n")
 	}
 
 	if hasInsiderPerspective {
