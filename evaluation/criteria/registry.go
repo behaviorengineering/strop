@@ -36,6 +36,7 @@ const (
 	CriterionIDNoTherapistVoice       CriterionID = "no_therapist_voice"
 	CriterionIDInsiderPerspective     CriterionID = "insider_perspective"
 	CriterionIDAntiAIFeel             CriterionID = "anti_ai_feel"
+	CriterionIDNoAphorismStack        CriterionID = "no_aphorism_stack"
 	CriterionIDNoRedundantExplanation CriterionID = "no_redundant_explanation"
 
 	// Output Quality Criteria (used in human approval/rejection stage).
@@ -359,6 +360,23 @@ MARKETING PHRASES (force enthusiasm):
 EDGE CASE:
 ⚠️ OK: "This is about..." (informative, not framing)
 ❌ BAD: "That's the essence of this expression" (meta-framing)`,
+		MaxPoints: 2.0,
+		Category:  CriterionCategoryOutputQuality,
+	})
+
+	registry.Register(CriterionDescription{
+		ID:          CriterionIDNoAphorismStack,
+		Name:        "No Aphorism Stack",
+		Description: `Reader-facing prose stays plain and explanatory. Do not stack LinkedIn-aphorism cadence: parallel Loud/Quiet couplets, semicolon aphorisms, or metaphor-shell restacks that only relabel the prior claim.`,
+		Scoring: `2 points: Claims move as scenes, facts, or mechanisms. No parallel-contrast couplet, semicolon aphorism, or metaphor-only restack of the previous sentence.
+1 point: One mild compressed line that still adds a concrete noun or stake; no stacked couplets.
+0 points: Any clear aphorism stack in the owned prose (parallel contrast couplet, semicolon aphorism, or consecutive metaphor restack with no new evidence).`,
+		Examples: `GOOD: Scene then fact: "She keeps her voice small and gets called shy. Clinics rarely refer that presentation."
+GOOD: "The study rested on four cases, so anyone outside that sample was less likely to be counted."
+BAD (score 0): "Loud shows up on the checklist. Quiet looks like personality."
+BAD (score 0): "Stress drains; purpose concentrates."
+BAD (score 0): Consecutive metaphor punches that only remix the prior claim (map/page, storm/filter, bill-to-pay) without a new scene or mechanism.
+Autopsy: fail punchy antithesis and metaphor remixes that sound clever but add no new evidence. Separate from contrastive negation ("isn't X, but Y") and from anti_ai_feel (colloquial framing devices).`,
 		MaxPoints: 2.0,
 		Category:  CriterionCategoryOutputQuality,
 	})

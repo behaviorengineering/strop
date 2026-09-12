@@ -60,6 +60,8 @@ description: >-
 
 **Empty `feedback`:** Contract violation — mandatory-field validation MUST fail so `RetryModuleInterceptor` re-runs; never inject synthetic checklist lines.
 
+**AI cadence (reader-facing prose):** Jobs that emit human-readable explanatory prose (essay composition/polish, claims thoughts, video TL;DW, newsletter-like jobs) MUST attach `strop/evaluation/aicadence` via `dspy.AppendAICadenceEvaluator` and prefer a **cheap** model for that role through `CreateChainedEvaluatorsFromConfig` `roleProviders` — the same class of MUST as wiring `RetryModuleInterceptor`. Score only `no_aphorism_stack`. Do **not** copy cadence prompts into each `{job}_modules.go`. Do **not** attach on vernacular-aphorism jobs (sayings fluff/ideation) or structural extractors (chapters/speakers). Optional Go belt: `aicadence.HeuristicFeedback` plus product phrase banks.
+
 **Envelope vs inner keys:** `EvaluateWorkflow` builds `generator_input` / `generator_output` containers. Inner keys are **per job** — prompts and Go maps MUST agree.
 
 | Item | Location (strop) |
@@ -67,6 +69,7 @@ description: >-
 | `DefaultChainedEvaluatorSignature` | `strop/dspy/chained_evaluator.go` |
 | `ChainedEvaluatorConfig` | `strop/dspy/chained_evaluator_config.go` |
 | `CreateChainedEvaluatorsFromConfig` | `strop/dspy/factory/evaluator_factory.go` |
+| `AppendAICadenceEvaluator` / `aicadence` | `strop/dspy/aicadence_append.go`, `strop/evaluation/aicadence` |
 | `ConsolidatorPromptBuilder` | `strop/dspy/chained_evaluator.go` |
 | Criterion prompt builders | `strop/evaluation/criteria/prompt_builder.go` |
 
