@@ -4,6 +4,8 @@ Toolkit for tempering LLM outputs: evaluate, refine, and gate until they pass. N
 
 Module: `github.com/behaviorengineering/strop`. Apps map config and logger at the boundary, then run generate → evaluate → optional Gate reject-and-regen.
 
+Agents: start at [AGENTS.md](AGENTS.md). Skills live in [ai-copilots/skills/](ai-copilots/skills/) (wire with [ai-copilots/BOOTSTRAP.md](ai-copilots/BOOTSTRAP.md)).
+
 ## Import path
 
 ```go
