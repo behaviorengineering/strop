@@ -10,7 +10,7 @@ description: >-
 
 **Principle:** Each pipeline has a `clients` package using shared **`strop/dspy/runner.JobRunner`**. Per-job **clients** hold the runner and delegate Generate/Evaluate; per-job **modules** hold signatures and prompts. Typed **inputs** implement `GeneratorInput` (`ToMap`, `GetVersion`) and `EvaluationInput` (`EvaluationMap`).
 
-**Related:** `.cursor/skills/strop-orchestration/SKILL.md`, `.cursor/skills/dspy-xml-structured-output/SKILL.md`, `.cursor/skills/dspy-prompt-engineering/SKILL.md`, `.cursor/skills/dspy-module-patterns/SKILL.md`. Product-specific overlays (YouTube, sayings paths) may exist as a **project** skill — load both; do not invent a second job pattern.
+**Related:** `.cursor/skills/strop-orchestration/SKILL.md`, `.cursor/skills/dspy-xml-structured-output/SKILL.md`, `.cursor/skills/dspy-prompt-engineering/SKILL.md`, `.cursor/skills/dspy-module-patterns/SKILL.md`, `.cursor/skills/golang-quality/SKILL.md` (CONSTRAINT 16 durable AI dumps). Product-specific overlays (YouTube, sayings paths) may exist as a **project** skill — load both; do not invent a second job pattern.
 
 ---
 
@@ -133,3 +133,27 @@ r.EvaluateWorkflow(ctx, job, genInput, generatorOutput, eventChan)
 ```
 
 Do not hand-build `generator_input` maps in services.
+
+---
+
+## 8. Durable TraceDir and runreport (AI testing)
+
+**CONSTRAINT:** When wiring `RLMConfig.TraceDir` or `runreport.Config.Dir`, MUST point them at a durable work-story root that survives process exit. MUST NOT nest the only dump under an analysis/cache `MkdirTemp` that `defer os.RemoveAll` deletes.
+
+- Enforcement: Pair every TraceDir / runreport Dir with the cleanup path of its parent tree; confirm dumps outlive that cleanup; log or return the durable root.
+- Violation: STOP, retarget dumps (or copy before cleanup), expose the path, re-check.
+
+CORRECT:
+```go
+workStory := opts.WorkStoryDir // durable; not teaching branch
+rlmCfg.TraceDir = filepath.Join(workStory, "rlm-traces", task)
+runReport.Dir = filepath.Join(workStory, "logs", "runs")
+```
+
+PROHIBITED:
+```go
+defer os.RemoveAll(analysisDir)
+rlmCfg.TraceDir = filepath.Join(analysisDir, "rlm-traces", task)
+```
+
+OTEL / OpenInference spans remain required (golang-quality C15). They do not replace on-disk JSONL/JSON for local AI debugging (golang-quality C16).
