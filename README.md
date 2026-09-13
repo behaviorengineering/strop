@@ -29,17 +29,18 @@ import (
 | `dspy` | ProviderConfig, generators, chained evaluators, field helpers |
 | `dspy/factory` | LLM, generator, evaluator, feedback factories and interceptor wiring |
 | `dspy/registry` | Module registry (generators, workflows, formatters) |
-| `dspy/runner` | JobRunner (generate + evaluate) |
+| `dspy/runner` | JobRunner (generate + evaluate; ambient ACE inject on generate) |
+| `dspy/ace` | Ambient ACE Manager on golang ctx (session playbook; loops credit) |
 | `dspy/workflow` | Parallel evaluation workflow |
 | `dspy/modules` | DirectivesCoT / Predict helpers |
 | `dspy/structured_output` | XML parser and interceptors |
 | `dspy/validation` | Generic mandatory-field / token / language validators |
 | `dspy/tracing` | OpenInference module interceptor |
-| `orchestration` | Refinement, per-item, composition loops, `NewFieldWalkStrategy`, `NewSectionWalkStrategy`, `NewPhaseWalkStrategy`, `DocumentArcDefinition`, `DocumentSectionDefinition` |
+| `orchestration` | Refinement, per-item, composition loops; ambient ACE trajectories when Manager on ctx |
 | `refinement` | Versioning, stopping, self-healing policy |
 | `regenerate` | Force / feedback options for re-runs |
 | `streaming` | Inference event channel types, StreamHandler, Actor constructors |
-| `runreport` | JSON execution traces |
+| `runreport` | JSON execution traces (ambient ctx; sibling of ACE, not the same) |
 | `agentsession` | One directory per short-lived agent conversation (transcript, card, evidence) |
 | `imageread` | Image load + visual brief helpers |
 | `log` | Minimal logger interface for strop packages |

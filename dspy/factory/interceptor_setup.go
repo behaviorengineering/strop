@@ -6,6 +6,7 @@ import (
 	"time"
 
 	stropdspy "github.com/behaviorengineering/strop/dspy"
+	"github.com/behaviorengineering/strop/dspy/ace"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
 	stropso "github.com/behaviorengineering/strop/dspy/structured_output"
 	stropvalidation "github.com/behaviorengineering/strop/dspy/validation"
@@ -403,6 +404,10 @@ func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, prov
 			}).Debug("Input processing interceptor added to module")
 		}
 	}
+
+	// ACE catch sits outside retry so transient LLM failures that later succeed are not
+	// recorded as pear-shaped. First interceptor is outermost.
+	existingInterceptors = append(existingInterceptors, ace.CatchInterceptor())
 
 	// Reliability: overall cap, then retry, then per-attempt timeout (innermost of these).
 	// First interceptor is outermost. A stall must die on the attempt clock so retry
