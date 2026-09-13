@@ -49,6 +49,8 @@ description: >-
 
 **Healing:** If score decreases, the loop MUST attempt self-healing before stopping for regression (`maxHealingAttempts >= 1`).
 
+**Ambient ACE (optional):** Host `ace.NewManager` (entity+job + context-keyed `LearningsPath`) → `ace.WithManager` on golang ctx for the session → `Close` at session end. Loops credit via Start/EndTrajectory; `JobRunner` injects `LearningsContext` into `retrieved_guides`. Playbook is session-scoped on that ctx, not a global default file. Not `humanreview.LearningService` demos. RLM Complete is a later edge.
+
 **Early exit:** Successful early exit MUST return a concrete selected ID — never `uuid.Nil`. Fallback order: pending → approved → any existing record.
 
 ---

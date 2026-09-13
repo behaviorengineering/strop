@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	stropdspy "github.com/behaviorengineering/strop/dspy"
+	"github.com/behaviorengineering/strop/dspy/ace"
 	dspymodules "github.com/behaviorengineering/strop/dspy/modules"
 	"github.com/behaviorengineering/strop/dspy/registry"
 	"github.com/behaviorengineering/strop/dspy/tracing"
@@ -163,6 +164,7 @@ func (r *JobRunner) GenerateResult(
 	inputs := input.ToMap()
 	inputs[stropdspy.FieldIterationVersion] = input.GetVersion()
 	r.fillRetrievedGuides(ctx, config.JobName, config.StepName, inputs)
+	appendACEPlaybook(ctx, inputs)
 
 	if eventChan != nil {
 		ctx = streaming.ContextWithEventChannel(ctx, eventChan)
@@ -314,6 +316,27 @@ func (r *JobRunner) fillRetrievedGuides(
 			"job": job, "step": step, "guides": len(guides),
 		}).Debug("Filled retrieved_guides on generator inputs")
 	}
+}
+
+// appendACEPlaybook merges ambient ACE LearningsContext into FieldRetrievedGuides.
+// Fail-open when no Manager is on ctx. Does not construct ACE. Generate only, not Evaluate.
+func appendACEPlaybook(ctx context.Context, inputs map[string]interface{}) {
+	if inputs == nil {
+		return
+	}
+	m := ace.FromContext(ctx)
+	if m == nil {
+		return
+	}
+	playbook := m.LearningsContext()
+	if strings.TrimSpace(playbook) == "" {
+		return
+	}
+	existing := ""
+	if s, ok := inputs[stropdspy.FieldRetrievedGuides].(string); ok {
+		existing = s
+	}
+	inputs[stropdspy.FieldRetrievedGuides] = ace.MergePlaybookIntoGuides(existing, playbook)
 }
 
 // FormatRetrievedGuides renders transferable principles as XML items for the generator input.

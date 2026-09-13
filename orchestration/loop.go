@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/behaviorengineering/strop/dspy/ace"
 	"github.com/behaviorengineering/strop/runreport"
 	"github.com/behaviorengineering/strop/streaming"
 
@@ -19,6 +20,7 @@ const perfectScoreForStopping = 10.0
 // RunRefinementLoop runs the generic refinement loop: generate → evaluate → check stop → save or recurse.
 // Optional self-healing on score decrease when the strategy implements HealingStrategy and the policy allows it.
 // Returns the selected version ID (last saved when continuing, or previous when score decreased / max versions).
+// When an ACE Manager is on ctx, each version is one trajectory (Start/RecordStep/End); host owns Manager lifetime.
 func RunRefinementLoop(
 	ctx context.Context,
 	entityID uuid.UUID,
@@ -33,6 +35,9 @@ func RunRefinementLoop(
 		return uuid.Nil, err
 	}
 	meta := runreport.ResolveMeta(strategy, entityID.String(), loopCtx.NextVersion)
+	if err := assertACEBinding(ctx, entityID.String(), meta.Job); err != nil {
+		return uuid.Nil, err
+	}
 	ctx, finishReport := runreport.StartSession(ctx, cfg, meta)
 	defer func() {
 		finishReport(err)
@@ -53,6 +58,8 @@ func RunRefinementLoop(
 		selectedID:       selectedID,
 		state:            loopCtx.State,
 		healingAttempts:  0,
+		aceJob:           meta.Job,
+		aceEntityID:      entityID.String(),
 	}
 	return runRefinementRecursive(ctx, strategy, policy, maxVersions, eventChan, state)
 }
@@ -64,6 +71,8 @@ type loopState struct {
 	selectedID       uuid.UUID
 	state            interface{}
 	healingAttempts  int
+	aceJob           string
+	aceEntityID      string
 }
 
 func runRefinementRecursive(
@@ -78,13 +87,18 @@ func runRefinementRecursive(
 		return state.selectedID, nil
 	}
 
-	out, err := strategy.GenerateAndEvaluate(ctx, state.version, state.previousFeedback, state.state, eventChan)
+	attemptCtx, finishACE := beginACEAttempt(ctx, state.aceEntityID, state.aceJob, state.version, "")
+	defer finishACE(ace.OutcomeFailure)
+
+	out, err := strategy.GenerateAndEvaluate(attemptCtx, state.version, state.previousFeedback, state.state, eventChan)
 	if err != nil {
+		finishACE(ace.OutcomeFailure)
 		return uuid.Nil, err
 	}
 	if c := runreport.CollectorFromContext(ctx); c != nil {
 		c.RecordRefinement(state.version, out.Score, truncateFeedback(out.Feedback, 200))
 	}
+	recordACERefinementStep(attemptCtx, state.version, out.Score, out.Feedback, firstNonEmpty(out.Rationale, out.EvalRationale))
 
 	shouldStop, returnID := policy.CheckStoppingConditions(
 		out.Score, state.previousScore, state.version,
@@ -95,8 +109,10 @@ func runRefinementRecursive(
 	if shouldStop && returnID == uuid.Nil && !scoreDecreased {
 		id, err := strategy.SaveVersion(ctx, state.version, out.OutputState, out)
 		if err != nil {
+			finishACE(ace.OutcomeFailure)
 			return uuid.Nil, err
 		}
+		finishACE(ace.OutcomeSuccess)
 		sendEvent(eventChan, "Perfect score achieved, stopping refinement")
 		return id, nil
 	}
@@ -111,6 +127,7 @@ func runRefinementRecursive(
 					if c := runreport.CollectorFromContext(ctx); c != nil {
 						c.RecordHealing(state.previousScore, out.Score, "self-healing retry after score decrease")
 					}
+					finishACE(ace.OutcomePartial)
 					return runRefinementRecursive(ctx, strategy, policy, maxVersions, eventChan, loopState{
 						version:          state.version + 1,
 						previousScore:    state.previousScore,
@@ -118,18 +135,23 @@ func runRefinementRecursive(
 						selectedID:       state.selectedID,
 						state:            state.state,
 						healingAttempts:  state.healingAttempts + 1,
+						aceJob:           state.aceJob,
+						aceEntityID:      state.aceEntityID,
 					})
 				}
 			}
 		}
+		finishACE(ace.OutcomeFailure)
 		sendEvent(eventChan, fmt.Sprintf("Score decreased from %.1f to %.1f. Stopping refinement.", state.previousScore, out.Score))
 		return state.selectedID, nil
 	}
 
 	id, err := strategy.SaveVersion(ctx, state.version, out.OutputState, out)
 	if err != nil {
+		finishACE(ace.OutcomeFailure)
 		return uuid.Nil, err
 	}
+	finishACE(ace.OutcomePartial)
 	return runRefinementRecursive(ctx, strategy, policy, maxVersions, eventChan, loopState{
 		version:          state.version + 1,
 		previousScore:    out.Score,
@@ -137,7 +159,18 @@ func runRefinementRecursive(
 		selectedID:       id,
 		state:            out.OutputState,
 		healingAttempts:  0,
+		aceJob:           state.aceJob,
+		aceEntityID:      state.aceEntityID,
 	})
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // normalizePerItemIndices returns which 0-based item indices to process.
@@ -200,6 +233,9 @@ func RunPerItemRefinementLoopWithIndices(
 		return uuid.Nil, err
 	}
 	meta := runreport.ResolveMeta(strategy, entityID.String(), loopCtx.NextVersion)
+	if err := assertACEBinding(ctx, entityID.String(), meta.Job); err != nil {
+		return uuid.Nil, err
+	}
 	ctx, finishReport := runreport.StartSession(ctx, cfg, meta)
 	defer func() {
 		finishReport(err)
@@ -218,56 +254,85 @@ func RunPerItemRefinementLoopWithIndices(
 	var allScores []float64
 	var allFeedbacks []string
 	var allRationales []string
+	aceEntityID := entityID.String()
+	aceJob := meta.Job
 	for _, i := range indices {
 		itemFeedback := loopCtx.PreviousFeedback // each item gets initial feedback at round 1.
 		previousScore := -1.0
 		healingAttempts := 0
 		for round := 1; round <= maxVersions; round++ {
-			score, feedback, rationale, runErr := strategy.GenerateAndEvaluateOne(ctx, i, round, itemFeedback, state, eventChan)
+			var (
+				score     float64
+				feedback  string
+				rationale string
+				runErr    error
+				stopItem  bool
+			)
+			func() {
+				attemptCtx, finishACE := beginACEAttempt(ctx, aceEntityID, aceJob, round, fmt.Sprintf("item %d round %d", i, round))
+				defer finishACE(ace.OutcomeFailure)
+				score, feedback, rationale, runErr = strategy.GenerateAndEvaluateOne(attemptCtx, i, round, itemFeedback, state, eventChan)
+				if runErr != nil {
+					finishACE(ace.OutcomeFailure)
+					return
+				}
+				if c := runreport.CollectorFromContext(ctx); c != nil {
+					c.RecordPerItemRefinement(i, round, score, truncateFeedback(feedback, 200))
+				}
+				recordACEItemStep(attemptCtx, i, round, score, feedback, rationale)
+				// Always attempt healing on score decrease before stopping this item.
+				// This mirrors single-entity loop behavior and avoids prematurely accepting degraded rounds.
+				if previousScore >= 0.0 && score < previousScore && healingAttempts < policy.MaxHealingAttempts() {
+					healingResult, healingErr := policy.AttemptHealing(ctx, nil, itemFeedback, previousScore, score)
+					if healingErr == nil && healingResult != nil && healingResult.ShouldRetry {
+						sendEvent(eventChan, fmt.Sprintf("Item %d/%d: score decreased from %.1f to %.1f. Self-healing: retrying with corrected feedback.", i+1, n, previousScore, score))
+						if c := runreport.CollectorFromContext(ctx); c != nil {
+							c.RecordHealing(previousScore, score, fmt.Sprintf("item %d self-healing retry", i+1))
+						}
+						finishACE(ace.OutcomePartial)
+						itemFeedback = healingResult.CorrectiveFeedback
+						healingAttempts++
+						return
+					}
+				}
+				shouldStop, _ := policy.CheckStoppingConditions(score, previousScore, round, strategy.ContextID(), uuid.Nil, feedback)
+				if minRoundsBeforePerfectScore > 0 && shouldStop && score >= perfectScoreForStopping && round < minRoundsBeforePerfectScore {
+					sendEvent(eventChan, fmt.Sprintf("Item %d/%d: score %.1f — refinement round %d/%d required before accepting perfect score; continuing with feedback",
+						i+1, n, score, round, minRoundsBeforePerfectScore))
+					shouldStop = false
+				}
+				// Consolidated feedback uses "[ ]" for unchecked items; do not stop (e.g. on score regression) while issues remain and rounds are left.
+				if shouldStop && score < perfectScoreForStopping && strings.Contains(feedback, "[ ]") && round < maxVersions {
+					sendEvent(eventChan, fmt.Sprintf("Item %d/%d: score %.1f — feedback still lists unchecked items; continuing refinement (round %d/%d)",
+						i+1, n, score, round, maxVersions))
+					shouldStop = false
+				}
+				if shouldStop || round == maxVersions {
+					allScores = append(allScores, score)
+					allFeedbacks = append(allFeedbacks, feedback)
+					allRationales = append(allRationales, rationale)
+					if shouldStop && round < maxVersions {
+						finishACE(ace.OutcomeSuccess)
+						sendEvent(eventChan, fmt.Sprintf("Item %d/%d: accepted (score %.1f)", i+1, n, score))
+					} else if shouldStop {
+						finishACE(ace.OutcomeSuccess)
+					} else {
+						finishACE(ace.OutcomePartial)
+					}
+					stopItem = true
+					return
+				}
+				finishACE(ace.OutcomePartial)
+				itemFeedback = feedback
+				previousScore = score
+				healingAttempts = 0
+			}()
 			if runErr != nil {
 				return uuid.Nil, runErr
 			}
-			if c := runreport.CollectorFromContext(ctx); c != nil {
-				c.RecordPerItemRefinement(i, round, score, truncateFeedback(feedback, 200))
-			}
-			// Always attempt healing on score decrease before stopping this item.
-			// This mirrors single-entity loop behavior and avoids prematurely accepting degraded rounds.
-			if previousScore >= 0.0 && score < previousScore && healingAttempts < policy.MaxHealingAttempts() {
-				healingResult, healingErr := policy.AttemptHealing(ctx, nil, itemFeedback, previousScore, score)
-				if healingErr == nil && healingResult != nil && healingResult.ShouldRetry {
-					sendEvent(eventChan, fmt.Sprintf("Item %d/%d: score decreased from %.1f to %.1f. Self-healing: retrying with corrected feedback.", i+1, n, previousScore, score))
-					if c := runreport.CollectorFromContext(ctx); c != nil {
-						c.RecordHealing(previousScore, score, fmt.Sprintf("item %d self-healing retry", i+1))
-					}
-					itemFeedback = healingResult.CorrectiveFeedback
-					healingAttempts++
-					continue
-				}
-			}
-			shouldStop, _ := policy.CheckStoppingConditions(score, previousScore, round, strategy.ContextID(), uuid.Nil, feedback)
-			if minRoundsBeforePerfectScore > 0 && shouldStop && score >= perfectScoreForStopping && round < minRoundsBeforePerfectScore {
-				sendEvent(eventChan, fmt.Sprintf("Item %d/%d: score %.1f — refinement round %d/%d required before accepting perfect score; continuing with feedback",
-					i+1, n, score, round, minRoundsBeforePerfectScore))
-				shouldStop = false
-			}
-			// Consolidated feedback uses "[ ]" for unchecked items; do not stop (e.g. on score regression) while issues remain and rounds are left.
-			if shouldStop && score < perfectScoreForStopping && strings.Contains(feedback, "[ ]") && round < maxVersions {
-				sendEvent(eventChan, fmt.Sprintf("Item %d/%d: score %.1f — feedback still lists unchecked items; continuing refinement (round %d/%d)",
-					i+1, n, score, round, maxVersions))
-				shouldStop = false
-			}
-			if shouldStop || round == maxVersions {
-				allScores = append(allScores, score)
-				allFeedbacks = append(allFeedbacks, feedback)
-				allRationales = append(allRationales, rationale)
-				if shouldStop && round < maxVersions {
-					sendEvent(eventChan, fmt.Sprintf("Item %d/%d: accepted (score %.1f)", i+1, n, score))
-				}
+			if stopItem {
 				break
 			}
-			itemFeedback = feedback
-			previousScore = score
-			healingAttempts = 0
 		}
 	}
 	avgScore := 0.0
