@@ -162,6 +162,8 @@ rlmCfg.TraceDir = filepath.Join(analysisDir, "rlm-traces", task)
 
 OTEL / OpenInference spans remain required (golang-quality C15). They do not replace on-disk JSONL/JSON for local AI debugging (golang-quality C16).
 
+When `RLMComplete` runs with TraceDir set, strop also appends `rlm_inputs.jsonl` in that directory with the **full** context and query (and later the final answer). Prefer that sidecar for fixtures: dspy-go's session metadata still truncates context to ~500 chars for display.
+
 ---
 
 ## 9. Isolate generators and evaluators before the chain
@@ -171,4 +173,4 @@ OTEL / OpenInference spans remain required (golang-quality C15). They do not rep
 - Enforcement: Host has `testdata` fixture + `LIVE_*` replay test (or documented offline-only rationale) for touched tasks.
 - Violation: STOP, extract a module-trace span, add replay, re-check.
 
-Full practice: `.cursor/skills/dspy-pipeline-isolation/SKILL.md` (golang-quality C17). Module-trace dumps from §8 are the fixture source.
+Full practice: `.cursor/skills/dspy-pipeline-isolation/SKILL.md` (golang-quality C17). Module-trace dumps from §8 are the fixture source for CoT; RLM fixtures prefer TraceDir/`rlm_inputs.jsonl`.

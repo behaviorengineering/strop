@@ -30,6 +30,14 @@ func TestCreateRLMModuleRequiresLLM(t *testing.T) {
 	}
 }
 
+func TestRLMConfigCreateModuleRequiresLLM(t *testing.T) {
+	cfg := stropdspy.RLMDefaults()
+	_, err := cfg.CreateModule()
+	if err == nil {
+		t.Fatal("expected error for nil cfg.LLM")
+	}
+}
+
 func TestRLMCompleteRequiresModule(t *testing.T) {
 	_, _, err := stropdspy.RLMComplete(nil, nil, "ctx", "query")
 	if err == nil {
