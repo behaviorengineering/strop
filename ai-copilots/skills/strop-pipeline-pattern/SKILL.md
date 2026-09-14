@@ -10,7 +10,7 @@ description: >-
 
 **Principle:** Each pipeline has a `clients` package using shared **`strop/dspy/runner.JobRunner`**. Per-job **clients** hold the runner and delegate Generate/Evaluate; per-job **modules** hold signatures and prompts. Typed **inputs** implement `GeneratorInput` (`ToMap`, `GetVersion`) and `EvaluationInput` (`EvaluationMap`).
 
-**Related:** `.cursor/skills/strop-orchestration/SKILL.md`, `.cursor/skills/dspy-xml-structured-output/SKILL.md`, `.cursor/skills/dspy-prompt-engineering/SKILL.md`, `.cursor/skills/dspy-module-patterns/SKILL.md`, `.cursor/skills/golang-quality/SKILL.md` (CONSTRAINT 16 durable AI dumps). Product-specific overlays (YouTube, sayings paths) may exist as a **project** skill — load both; do not invent a second job pattern.
+**Related:** `.cursor/skills/strop-orchestration/SKILL.md`, `.cursor/skills/dspy-xml-structured-output/SKILL.md`, `.cursor/skills/dspy-prompt-engineering/SKILL.md`, `.cursor/skills/dspy-module-patterns/SKILL.md`, `.cursor/skills/dspy-pipeline-isolation/SKILL.md`, `.cursor/skills/golang-quality/SKILL.md` (CONSTRAINT 16 durable AI dumps; CONSTRAINT 17 module isolation). Product-specific overlays (YouTube, sayings paths) may exist as a **project** skill — load both; do not invent a second job pattern.
 
 ---
 
@@ -136,18 +136,22 @@ Do not hand-build `generator_input` maps in services.
 
 ---
 
-## 8. Durable TraceDir and runreport (AI testing)
+## 8. Durable TraceDir, module traces, and runreport (AI testing)
 
-**CONSTRAINT:** When wiring `RLMConfig.TraceDir` or `runreport.Config.Dir`, MUST point them at a durable work-story root that survives process exit. MUST NOT nest the only dump under an analysis/cache `MkdirTemp` that `defer os.RemoveAll` deletes.
+**CONSTRAINT:** When wiring `RLMConfig.TraceDir`, `dspy.AttachModuleTrace`, or `runreport.Config.Dir`, MUST point them at a durable work-story root that survives process exit. MUST NOT nest the only dump under an analysis/cache `MkdirTemp` that `defer os.RemoveAll` deletes.
 
-- Enforcement: Pair every TraceDir / runreport Dir with the cleanup path of its parent tree; confirm dumps outlive that cleanup; log or return the durable root.
+- Enforcement: Pair every TraceDir / module-trace dir / runreport Dir with the cleanup path of its parent tree; confirm dumps outlive that cleanup; log or return the durable root.
 - Violation: STOP, retarget dumps (or copy before cleanup), expose the path, re-check.
+
+`InterceptorSetup` always attaches dspy-go `TracingInterceptor`. It is a no-op until the host calls `dspy.AttachModuleTrace` (puts a TraceSession on ctx). That dump is the CoT/Predict I/O story (inputs + outputs JSONL), sibling to RLM `TraceDir`.
 
 CORRECT:
 ```go
 workStory := opts.WorkStoryDir // durable; not teaching branch
 rlmCfg.TraceDir = filepath.Join(workStory, "rlm-traces", task)
 runReport.Dir = filepath.Join(workStory, "logs", "runs")
+ctx, closeTrace, err := dspy.AttachModuleTrace(ctx, filepath.Join(workStory, "module-traces"), map[string]any{"job": "digest"})
+defer func() { _ = closeTrace() }()
 ```
 
 PROHIBITED:
@@ -157,3 +161,14 @@ rlmCfg.TraceDir = filepath.Join(analysisDir, "rlm-traces", task)
 ```
 
 OTEL / OpenInference spans remain required (golang-quality C15). They do not replace on-disk JSONL/JSON for local AI debugging (golang-quality C16).
+
+---
+
+## 9. Isolate generators and evaluators before the chain
+
+**CONSTRAINT:** When adding or changing a pipeline generator or evaluator, MUST capture Process inputs from `AttachModuleTrace` / TraceDir dumps and exercise that module alone (offline zip gates + env-gated live opt-in) before relying on a full JobRunner reseed. Discrete machine contracts MUST stay on structured signature fields.
+
+- Enforcement: Host has `testdata` fixture + `LIVE_*` replay test (or documented offline-only rationale) for touched tasks.
+- Violation: STOP, extract a module-trace span, add replay, re-check.
+
+Full practice: `.cursor/skills/dspy-pipeline-isolation/SKILL.md` (golang-quality C17). Module-trace dumps from §8 are the fixture source.
