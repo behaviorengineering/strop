@@ -15,6 +15,7 @@ import (
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/interceptors"
+	dspylogging "github.com/XiaoConstantine/dspy-go/pkg/logging"
 	"github.com/XiaoConstantine/dspy-go/pkg/modules"
 )
 
@@ -438,6 +439,10 @@ func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, prov
 	}
 
 	existingInterceptors = append(existingInterceptors, runreport.ModuleInterceptor())
+
+	// Full module I/O JSONL when the host attaches a TraceSession (see dspy.AttachModuleTrace).
+	// No-op when ctx has no session, so this is safe for every consumer.
+	existingInterceptors = append(existingInterceptors, dspylogging.TracingInterceptor())
 
 	module.SetInterceptors(existingInterceptors)
 

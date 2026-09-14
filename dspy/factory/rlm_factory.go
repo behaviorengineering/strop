@@ -10,6 +10,7 @@ import (
 )
 
 // CreateRLM builds a Recursive Language Model from a provider config.
+// Resolves the LLM, sets it on cfg, then calls cfg.CreateModule (config create).
 // The module explores large context via a Go REPL; hosts pass context and query to Complete.
 func (f *GeneratorFactory) CreateRLM(
 	ctx context.Context,
@@ -27,7 +28,8 @@ func (f *GeneratorFactory) CreateRLM(
 	if err != nil {
 		return nil, fmt.Errorf("%s: create LLM: %w", errorPrefix, err)
 	}
-	module, err := stropdspy.CreateRLMModule(llm, cfg)
+	cfg.LLM = llm
+	module, err := cfg.CreateModule()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errorPrefix, err)
 	}
