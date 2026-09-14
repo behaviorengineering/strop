@@ -10,7 +10,11 @@ description: >-
 
 **Principle:** Each pipeline has a `clients` package using shared **`strop/dspy/runner.JobRunner`**. Per-job **clients** hold the runner and delegate Generate/Evaluate; per-job **modules** hold signatures and prompts. Typed **inputs** implement `GeneratorInput` (`ToMap`, `GetVersion`) and `EvaluationInput` (`EvaluationMap`).
 
+<<<<<<< HEAD
 **Related:** `.cursor/skills/strop-orchestration/SKILL.md`, `.cursor/skills/dspy-xml-structured-output/SKILL.md`, `.cursor/skills/dspy-prompt-engineering/SKILL.md`, `.cursor/skills/dspy-module-patterns/SKILL.md`, `.cursor/skills/dspy-pipeline-isolation/SKILL.md`, `.cursor/skills/golang-quality/SKILL.md` (CONSTRAINT 16 durable AI dumps; CONSTRAINT 17 module isolation). Product-specific overlays (YouTube, sayings paths) may exist as a **project** skill — load both; do not invent a second job pattern.
+=======
+**Related:** `.cursor/skills/strop-orchestration/SKILL.md`, `.cursor/skills/dspy-xml-structured-output/SKILL.md`, `.cursor/skills/dspy-prompt-engineering/SKILL.md`, `.cursor/skills/dspy-module-patterns/SKILL.md`, `.cursor/skills/golang-quality/SKILL.md` (CONSTRAINT 16 durable AI dumps). Product-specific overlays (YouTube, sayings paths) may exist as a **project** skill — load both; do not invent a second job pattern.
+>>>>>>> origin/main
 
 ---
 
