@@ -91,16 +91,26 @@ func ValidateMandatoryFieldsWithResolver(defaultFields []string, resolver Mandat
 				fieldsToValidate = append(fieldsToValidate, outputField.Name)
 			}
 		}
-		return validateMandatoryFieldList(fieldsToValidate, outputs)
+		return validateNamedFieldList("mandatory field", fieldsToValidate, outputs)
 	}
 }
 
 // ValidateFieldList checks that each named field exists and is non-empty.
 func ValidateFieldList(fieldsToValidate []string, outputs map[string]any) error {
-	return validateMandatoryFieldList(fieldsToValidate, outputs)
+	return validateNamedFieldList("mandatory field", fieldsToValidate, outputs)
 }
 
 func validateMandatoryFieldList(fieldsToValidate []string, outputs map[string]any) error {
+	return validateNamedFieldList("mandatory field", fieldsToValidate, outputs)
+}
+
+// validateNamedFieldList checks that each named key exists and is non-empty in values.
+// kind is used in the error prefix (e.g. "mandatory field", "required input").
+func validateNamedFieldList(kind string, fieldsToValidate []string, values map[string]any) error {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		kind = "field"
+	}
 	// Deduplicate while preserving first-seen order so each map key is validated once and error messages stay clear.
 	if len(fieldsToValidate) > 1 {
 		seen := make(map[string]bool, len(fieldsToValidate))
@@ -115,7 +125,10 @@ func validateMandatoryFieldList(fieldsToValidate []string, outputs map[string]an
 		fieldsToValidate = unique
 	}
 
-	if len(outputs) == 0 {
+	if len(values) == 0 {
+		if kind == "required input" {
+			return fmt.Errorf("inputs are empty, expected fields: %v", fieldsToValidate)
+		}
 		return fmt.Errorf("result is empty, expected fields: %v", fieldsToValidate)
 	}
 
@@ -123,7 +136,7 @@ func validateMandatoryFieldList(fieldsToValidate []string, outputs map[string]an
 	var emptyFields []string
 
 	for _, fieldName := range fieldsToValidate {
-		value, exists := outputs[fieldName]
+		value, exists := values[fieldName]
 		if !exists {
 			missingFields = append(missingFields, fieldName)
 			continue
@@ -149,13 +162,13 @@ func validateMandatoryFieldList(fieldsToValidate []string, outputs map[string]an
 			errorParts = append(errorParts, fmt.Sprintf("empty fields: %v", emptyFields))
 		}
 
-		availableFields := make([]string, 0, len(outputs))
-		for k := range outputs {
+		availableFields := make([]string, 0, len(values))
+		for k := range values {
 			availableFields = append(availableFields, k)
 		}
 
-		return fmt.Errorf("mandatory field validation failed (%s) - available fields: %v",
-			strings.Join(errorParts, ", "), availableFields)
+		return fmt.Errorf("%s validation failed (%s) - available fields: %v",
+			kind, strings.Join(errorParts, ", "), availableFields)
 	}
 
 	return nil

@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -45,6 +46,7 @@ type InterceptorSetup struct {
 	// Input processor factory - allows pipeline-specific input processing (validation, mutation, transformation).
 	inputProcessorFactory        func(provider stropdspy.ProviderConfig) stropvalidation.InputProcessor
 	outputValidators             map[string]stropvalidation.OutputValidator
+	requiredInputs               map[string][]string
 	formatInstructionsSupplement stropso.FormatInstructionsSupplement
 	adjustParseSignature         stropso.ParseSignatureAdjuster
 	afterParse                   stropso.AfterParseHook
@@ -77,6 +79,7 @@ func NewInterceptorSetup(
 		runReports:                     runReports.Defaults(),
 		inputProcessorFactory:          inputProcessorFactory,
 		outputValidators:               make(map[string]stropvalidation.OutputValidator),
+		requiredInputs:                 make(map[string][]string),
 	}
 }
 
@@ -94,6 +97,19 @@ func (s *InterceptorSetup) RegisterOutputValidator(displayName string, validator
 // RegisterMandatoryFields registers ValidateMandatoryFields for the module display name.
 func (s *InterceptorSetup) RegisterMandatoryFields(displayName string, fields []string) {
 	s.RegisterOutputValidator(displayName, stropvalidation.ValidateMandatoryFields(fields))
+}
+
+// RegisterRequiredInputs registers ValidateRequiredInputs for the module display name.
+// Listed input keys must be present and non-empty before the module runs (mirror of RegisterMandatoryFields).
+func (s *InterceptorSetup) RegisterRequiredInputs(displayName string, fields []string) {
+	if s == nil || displayName == "" {
+		return
+	}
+	if s.requiredInputs == nil {
+		s.requiredInputs = make(map[string][]string)
+	}
+	cp := append([]string(nil), fields...)
+	s.requiredInputs[displayName] = cp
 }
 
 func (s *InterceptorSetup) stropLogger() stroplog.Logger {
@@ -356,6 +372,38 @@ func interceptableDisplayName(module core.InterceptableModule) string {
 	return fmt.Sprintf("%T", module)
 }
 
+// composeInputProcessor chains RegisterRequiredInputs with the optional host inputProcessorFactory.
+func (s *InterceptorSetup) composeInputProcessor(displayName string, provider stropdspy.ProviderConfig) stropvalidation.InputProcessor {
+	if s == nil {
+		return nil
+	}
+	var chain []stropvalidation.InputProcessor
+	if s.requiredInputs != nil {
+		if fields, ok := s.requiredInputs[displayName]; ok {
+			chain = append(chain, stropvalidation.ValidateRequiredInputs(fields))
+		}
+	}
+	if s.inputProcessorFactory != nil {
+		if p := s.inputProcessorFactory(provider); p != nil {
+			chain = append(chain, p)
+		}
+	}
+	if len(chain) == 0 {
+		return nil
+	}
+	if len(chain) == 1 {
+		return chain[0]
+	}
+	return func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo) error {
+		for _, p := range chain {
+			if err := p(ctx, inputs, info); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 // AddInterceptors adds timeout, retry, and OpenInference interceptors to a module.
 // If inputProcessorFactory is provided, it will be called with the provider config to create
 // an input processing interceptor (validation, mutation, transformation).
@@ -388,8 +436,7 @@ func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, prov
 	// Add input processing interceptor first (outermost - processes inputs before anything else).
 	// This should be the first interceptor added so it executes last (innermost in reverse order).
 	// The processor can validate, mutate, or transform inputs based on module and provider config.
-	if s.inputProcessorFactory != nil {
-		processor := s.inputProcessorFactory(provider)
+	if processor := s.composeInputProcessor(module.GetDisplayName(), provider); processor != nil {
 		var processingLogger stropvalidation.Logger
 		if lg := s.stropLogger(); lg != nil {
 			processingLogger = lg
