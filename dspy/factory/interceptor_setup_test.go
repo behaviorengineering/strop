@@ -419,3 +419,16 @@ func TestInterceptorSetup_RegisterMandatoryFieldsOverridesDefault(t *testing.T) 
 	setup.RegisterMandatoryFields("Chapter Ideas", []string{"main_idea"})
 	require.NotNil(t, setup.outputValidators["Chapter Ideas"])
 }
+
+func TestInterceptorSetup_RegisterRequiredInputs(t *testing.T) {
+	t.Parallel()
+	setup := NewInterceptorSetup(false, "", nil, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
+	setup.RegisterRequiredInputs("bootstrap_story", []string{"repo_id", "readme_snapshot"})
+	require.Equal(t, []string{"repo_id", "readme_snapshot"}, setup.requiredInputs["bootstrap_story"])
+	proc := setup.composeInputProcessor("bootstrap_story", stropdspy.ProviderConfig{})
+	require.NotNil(t, proc)
+	err := proc(context.Background(), map[string]any{"repo_id": "x", "readme_snapshot": ""}, nil)
+	require.Error(t, err)
+	err = proc(context.Background(), map[string]any{"repo_id": "x", "readme_snapshot": "hi"}, nil)
+	require.NoError(t, err)
+}
