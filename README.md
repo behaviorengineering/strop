@@ -18,6 +18,7 @@ import (
     "github.com/behaviorengineering/strop/humanreview"
     "github.com/behaviorengineering/strop/humanreview/reviewflow"
     "github.com/behaviorengineering/strop/jobskip"
+    "github.com/behaviorengineering/strop/stepplan"
     "github.com/behaviorengineering/strop/concurrency"
 )
 ```
@@ -36,7 +37,7 @@ import (
 | `dspy/structured_output` | XML parser and interceptors |
 | `dspy/validation` | Generic mandatory-field / token / language validators |
 | `dspy/tracing` | OpenInference module interceptor |
-| `orchestration` | Refinement, per-item, composition loops; ambient ACE trajectories when Manager on ctx |
+| `orchestration` | Refinement, per-item, composition, and step-plan loops; ambient ACE trajectories when Manager on ctx |
 | `refinement` | Versioning, stopping, self-healing policy |
 | `regenerate` | Force / feedback options for re-runs |
 | `streaming` | Inference event channel types, StreamHandler, Actor constructors |
@@ -48,6 +49,7 @@ import (
 | `humanreview` | Gate, FeedbackNormalizer, ScoreProposer, stored-feedback helpers, LearningService / LearningStore |
 | `humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
 | `jobskip` | Per-job generate-queue skip Store + Restore (Labeler / Selector ports) |
+| `stepplan` | Ordered plan artifact + filesystem step checkpoints for resumable drivers |
 | `concurrency` | Adaptive in-flight limiter and `RunPool` for parallel independent LLM units |
 
 ## Boundary rules
