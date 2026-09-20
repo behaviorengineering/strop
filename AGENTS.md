@@ -21,4 +21,10 @@ Resolve the module root when strop is only a Go dependency:
 go list -m -f '{{.Dir}}' github.com/behaviorengineering/strop
 ```
 
+## Package layout
+
+- Public API lives under `pkg/<domain>` (dspy, orchestration, humanreview, …).
+- MUST NOT scatter new public packages at the module root.
+
+
 MUST keep host links pointing at this module's `ai-copilots/skills/` tree. MUST NOT copy skill bodies into the host unless links fail and the user approves.
