@@ -7,6 +7,7 @@
 //   - RunRefinementLoop: generate → evaluate → check stop → save or recurse (with optional self-healing).
 //   - RunPerItemRefinementLoop*: per-item generate → evaluate → refine, then one save.
 //   - RunCompositionLoop: ordered phases with per-phase generate → gate → lock (vertical document assembly).
+//   - RunStepPlan: ordered stepplan.Plan with filesystem checkpoints, per-step budgets, and resume.
 //
 // Strategies:
 //   - RefinementStrategy — entity-level version refine.
@@ -16,6 +17,7 @@
 //   - FieldWalkStrategy — single-field phases over a string draft (one owned field per phase).
 //   - SectionWalkStrategy — typed field-walk over DocumentSectionDefinition (polish / translation).
 //   - PhaseWalkStrategy — multi-field phases with owned-field sets, pluggable Finalize, and retry wiring.
+//   - StepRunner — host callback for one stepplan.Step (RLM / CoT / other); used by RunStepPlan.
 //
 // Run execution traces (when run reports are enabled): loops call runreport.StartSession;
 // steps are recorded via context-scoped collectors and DSPy middleware (module calls, evaluators,

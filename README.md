@@ -18,6 +18,7 @@ import (
     "github.com/behaviorengineering/strop/pkg/humanreview"
     "github.com/behaviorengineering/strop/pkg/humanreview/reviewflow"
     "github.com/behaviorengineering/strop/pkg/jobskip"
+    "github.com/behaviorengineering/strop/pkg/stepplan"
     "github.com/behaviorengineering/strop/pkg/concurrency"
 )
 ```
@@ -36,7 +37,7 @@ import (
 | `pkg/dspy/structured_output` | XML parser and interceptors |
 | `pkg/dspy/validation` | Generic mandatory-field / token / language validators |
 | `pkg/dspy/tracing` | OpenInference module interceptor |
-| `pkg/orchestration` | Refinement, per-item, composition loops; ambient ACE trajectories when Manager on ctx |
+| `pkg/orchestration` | Refinement, per-item, composition, and step-plan loops; ambient ACE trajectories when Manager on ctx |
 | `pkg/refinement` | Versioning, stopping, self-healing policy |
 | `pkg/regenerate` | Force / feedback options for re-runs |
 | `pkg/streaming` | Inference event channel types, StreamHandler, Actor constructors |
@@ -48,6 +49,7 @@ import (
 | `pkg/humanreview` | Gate, FeedbackNormalizer, ScoreProposer, stored-feedback helpers, LearningService / LearningStore |
 | `pkg/humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
 | `pkg/jobskip` | Per-job generate-queue skip Store + Restore (Labeler / Selector ports) |
+| `pkg/stepplan` | Ordered plan artifact + filesystem step checkpoints for resumable drivers |
 | `pkg/concurrency` | Adaptive in-flight limiter and `RunPool` for parallel independent LLM units |
 
 ## Boundary rules
