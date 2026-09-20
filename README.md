@@ -2,7 +2,7 @@
 
 Toolkit for tempering LLM outputs: evaluate, refine, and gate until they pass. Not a prompt-authoring SDK.
 
-Module: `github.com/behaviorengineering/strop`. Apps map config and logger at the boundary, then run generate → evaluate → optional Gate reject-and-regen.
+Module: `github.com/behaviorengineering/strop`. Public imports: `github.com/behaviorengineering/strop/pkg/<domain>`. Apps map config and logger at the boundary, then run generate → evaluate → optional Gate reject-and-regen.
 
 Agents: start at [AGENTS.md](AGENTS.md). Skills live in [ai-copilots/skills/](ai-copilots/skills/) (wire with [ai-copilots/BOOTSTRAP.md](ai-copilots/BOOTSTRAP.md)).
 
@@ -10,15 +10,15 @@ Agents: start at [AGENTS.md](AGENTS.md). Skills live in [ai-copilots/skills/](ai
 
 ```go
 import (
-    stropdspy "github.com/behaviorengineering/strop/dspy"
-    "github.com/behaviorengineering/strop/dspy/factory"
-    "github.com/behaviorengineering/strop/dspy/registry"
-    "github.com/behaviorengineering/strop/dspy/runner"
-    "github.com/behaviorengineering/strop/orchestration"
-    "github.com/behaviorengineering/strop/humanreview"
-    "github.com/behaviorengineering/strop/humanreview/reviewflow"
-    "github.com/behaviorengineering/strop/jobskip"
-    "github.com/behaviorengineering/strop/concurrency"
+    stropdspy "github.com/behaviorengineering/strop/pkg/dspy"
+    "github.com/behaviorengineering/strop/pkg/dspy/factory"
+    "github.com/behaviorengineering/strop/pkg/dspy/registry"
+    "github.com/behaviorengineering/strop/pkg/dspy/runner"
+    "github.com/behaviorengineering/strop/pkg/orchestration"
+    "github.com/behaviorengineering/strop/pkg/humanreview"
+    "github.com/behaviorengineering/strop/pkg/humanreview/reviewflow"
+    "github.com/behaviorengineering/strop/pkg/jobskip"
+    "github.com/behaviorengineering/strop/pkg/concurrency"
 )
 ```
 
@@ -26,29 +26,29 @@ import (
 
 | Package | Role |
 |---------|------|
-| `dspy` | ProviderConfig, generators, chained evaluators, field helpers |
-| `dspy/factory` | LLM, generator, evaluator, feedback factories and interceptor wiring |
-| `dspy/registry` | Module registry (generators, workflows, formatters) |
-| `dspy/runner` | JobRunner (generate + evaluate; ambient ACE inject on generate) |
-| `dspy/ace` | Ambient ACE Manager on golang ctx (session playbook; loops credit) |
-| `dspy/workflow` | Parallel evaluation workflow |
-| `dspy/modules` | DirectivesCoT / Predict helpers |
-| `dspy/structured_output` | XML parser and interceptors |
-| `dspy/validation` | Generic mandatory-field / token / language validators |
-| `dspy/tracing` | OpenInference module interceptor |
-| `orchestration` | Refinement, per-item, composition loops; ambient ACE trajectories when Manager on ctx |
-| `refinement` | Versioning, stopping, self-healing policy |
-| `regenerate` | Force / feedback options for re-runs |
-| `streaming` | Inference event channel types, StreamHandler, Actor constructors |
-| `runreport` | JSON execution traces (ambient ctx; sibling of ACE, not the same) |
-| `agentsession` | One directory per short-lived agent conversation (transcript, card, evidence) |
-| `imageread` | Image load + visual brief helpers |
-| `log` | Minimal logger interface for strop packages |
-| `evaluation` | Aggregation types, criterion registry/prompt builder, typed keys |
-| `humanreview` | Gate, FeedbackNormalizer, ScoreProposer, stored-feedback helpers, LearningService / LearningStore |
-| `humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
-| `jobskip` | Per-job generate-queue skip Store + Restore (Labeler / Selector ports) |
-| `concurrency` | Adaptive in-flight limiter and `RunPool` for parallel independent LLM units |
+| `pkg/dspy` | ProviderConfig, generators, chained evaluators, field helpers |
+| `pkg/dspy/factory` | LLM, generator, evaluator, feedback factories and interceptor wiring |
+| `pkg/dspy/registry` | Module registry (generators, workflows, formatters) |
+| `pkg/dspy/runner` | JobRunner (generate + evaluate; ambient ACE inject on generate) |
+| `pkg/dspy/ace` | Ambient ACE Manager on golang ctx (session playbook; loops credit) |
+| `pkg/dspy/workflow` | Parallel evaluation workflow |
+| `pkg/dspy/modules` | DirectivesCoT / Predict helpers |
+| `pkg/dspy/structured_output` | XML parser and interceptors |
+| `pkg/dspy/validation` | Generic mandatory-field / token / language validators |
+| `pkg/dspy/tracing` | OpenInference module interceptor |
+| `pkg/orchestration` | Refinement, per-item, composition loops; ambient ACE trajectories when Manager on ctx |
+| `pkg/refinement` | Versioning, stopping, self-healing policy |
+| `pkg/regenerate` | Force / feedback options for re-runs |
+| `pkg/streaming` | Inference event channel types, StreamHandler, Actor constructors |
+| `pkg/runreport` | JSON execution traces (ambient ctx; sibling of ACE, not the same) |
+| `pkg/agentsession` | One directory per short-lived agent conversation (transcript, card, evidence) |
+| `pkg/imageread` | Image load + visual brief helpers |
+| `pkg/log` | Minimal logger interface for strop packages |
+| `pkg/evaluation` | Aggregation types, criterion registry/prompt builder, typed keys |
+| `pkg/humanreview` | Gate, FeedbackNormalizer, ScoreProposer, stored-feedback helpers, LearningService / LearningStore |
+| `pkg/humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
+| `pkg/jobskip` | Per-job generate-queue skip Store + Restore (Labeler / Selector ports) |
+| `pkg/concurrency` | Adaptive in-flight limiter and `RunPool` for parallel independent LLM units |
 
 ## Boundary rules
 
