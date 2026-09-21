@@ -93,20 +93,20 @@ func stringMapCodec() SectionCodec[map[string]string] {
 func TestSectionWalkStrategy_emptyThenAggregate(t *testing.T) {
 	t.Parallel()
 	seed := map[string]string{
-		"description": "d",
-		"tldr":        "tl",
-		"fluff":       "f",
+		"description":  "d",
+		"tldr":         "tl",
+		"fluff":        "f",
 		"going_deeper": "g",
 	}
 	runner := &fakeSectionRunner{t: t, failFirst: map[string]bool{"description": true}}
 	strat := NewSectionWalkStrategy(SectionWalkConfig[map[string]string]{
-		Sections: testSectionDefinition(),
-		Seed:     seed,
-		Version:  1,
+		Sections:        testSectionDefinition(),
+		Seed:            seed,
+		Version:         1,
 		VersionFeedback: "outer-feedback",
-		Runner:   runner,
-		Codec:    stringMapCodec(),
-		EmptyResultErr: fmt.Errorf("empty"),
+		Runner:          runner,
+		Codec:           stringMapCodec(),
+		EmptyResultErr:  fmt.Errorf("empty"),
 	})
 	result, err := RunCompositionLoop(context.Background(), strat, nil)
 	require.NoError(t, err)
@@ -141,11 +141,11 @@ func TestSectionWalkStrategy_sourceTextFunc(t *testing.T) {
 		return en[sectionID]
 	}
 	strat := NewSectionWalkStrategy(SectionWalkConfig[map[string]string]{
-		Sections: testSectionDefinition(),
-		Seed:     seedES,
-		Version:  1,
-		Runner:   runner,
-		Codec:    codec,
+		Sections:       testSectionDefinition(),
+		Seed:           seedES,
+		Version:        1,
+		Runner:         runner,
+		Codec:          codec,
 		EmptyResultErr: fmt.Errorf("empty"),
 	})
 	result, err := RunCompositionLoop(context.Background(), strat, nil)

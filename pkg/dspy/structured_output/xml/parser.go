@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/behaviorengineering/strop/pkg/dspy/rawresponse"
@@ -91,7 +92,7 @@ func (p *XMLParser) FormatName() string {
 func convertToXMLConfig(config interface{}) XMLConfig {
 	// Use reflection to extract config fields.
 	v := reflect.ValueOf(config)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {
@@ -260,34 +261,39 @@ func (p *XMLParser) GenerateInstructions(signature core.Signature, config interf
 		switch {
 		case isMapField(output):
 			mapKeys := extractExactMapKeys(output.Description, signature.Instruction)
-			sb.WriteString(fmt.Sprintf("  <%s>\n", tagName))
 			if len(mapKeys) > 0 {
+				children := make([]xmlSkeletonChild, 0, len(mapKeys))
 				for _, key := range mapKeys {
 					ph := fillPlaceholder(key)
-					writeCDATAFillTag(&sb, "    ", key, ph)
+					children = append(children, xmlSkeletonChild{Tag: key, Placeholder: ph})
 					replaceLines = append(replaceLines, fmt.Sprintf("- %s → numeric score for criterion %s only (inside CDATA; never put the score in a tag name)", ph, key))
 				}
-				fieldGuide.WriteString(fmt.Sprintf("- %s (map): %s. Use the child tags shown; replace each uppercase {{PLACEHOLDER}} inside that child's CDATA with the numeric score.\n", tagName, description))
+				if err := writeXMLFieldSkeleton(&sb, xmlSkeletonData{Kind: "map", Tag: tagName, Children: children}); err != nil {
+					return "", err
+				}
+				fmt.Fprintf(&fieldGuide, "- %s (map): %s. Use the child tags shown; replace each uppercase {{PLACEHOLDER}} inside that child's CDATA with the numeric score.\n", tagName, description)
 			} else {
-				// No inventable KEY tag — empty parent plus explicit emit rules.
-				sb.WriteString(fmt.Sprintf("  </%s>\n", tagName))
-				fieldGuide.WriteString(fmt.Sprintf("- %s (map): %s. Inside <%s>, emit one child per map entry with CDATA around the score. Tag name = key (letters/underscores only). Never use a number as a tag name.\n", tagName, description, tagName))
+				if err := writeXMLFieldSkeleton(&sb, xmlSkeletonData{Kind: "map-empty", Tag: tagName}); err != nil {
+					return "", err
+				}
+				fmt.Fprintf(&fieldGuide, "- %s (map): %s. Inside <%s>, emit one child per map entry with CDATA around the score. Tag name = key (letters/underscores only). Never use a number as a tag name.\n", tagName, description, tagName)
 				replaceLines = append(replaceLines, fmt.Sprintf("- <%s> children → one <exact_key><![CDATA[score]]></exact_key> per key from the prompt's criterion ID mapping", tagName))
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("  </%s>\n", tagName))
 		case isArrayField(output, xmlConfig):
 			childTag := arrayChildTag(tagName)
 			ph := fillPlaceholder(childTag)
-			sb.WriteString(fmt.Sprintf("  <%s>\n", tagName))
-			writeCDATAFillTag(&sb, "    ", childTag, ph)
-			sb.WriteString(fmt.Sprintf("  </%s>\n", tagName))
-			fieldGuide.WriteString(fmt.Sprintf("- %s (list): %s. Repeat the <%s> CDATA block once per item.\n", tagName, description, childTag))
+			if err := writeXMLFieldSkeleton(&sb, xmlSkeletonData{Kind: "array", Tag: tagName, ChildTag: childTag, Placeholder: ph}); err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&fieldGuide, "- %s (list): %s. Repeat the <%s> CDATA block once per item.\n", tagName, description, childTag)
 			replaceLines = append(replaceLines, fmt.Sprintf("- %s → one list item text inside CDATA (repeat the <%s> block for each item)", ph, childTag))
 		default:
 			ph := fillPlaceholder(tagName)
-			writeCDATAFillTag(&sb, "  ", tagName, ph)
-			fieldGuide.WriteString(fmt.Sprintf("- %s: %s\n", tagName, description))
+			if err := writeXMLFieldSkeleton(&sb, xmlSkeletonData{Kind: "scalar", Tag: tagName, Placeholder: ph}); err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&fieldGuide, "- %s: %s\n", tagName, description)
 			replaceLines = append(replaceLines, fmt.Sprintf("- %s → value for <%s> only (inside that field's CDATA block)", ph, tagName))
 		}
 	}
@@ -309,7 +315,7 @@ func (p *XMLParser) GenerateInstructions(signature core.Signature, config interf
 	}
 
 	sb.WriteString("Rules:\n")
-	sb.WriteString(fmt.Sprintf("1. Use exactly these %d field(s) in order: %s\n", len(fieldNames), strings.Join(fieldNames, ", ")))
+	fmt.Fprintf(&sb, "1. Use exactly these %d field(s) in order: %s\n", len(fieldNames), strings.Join(fieldNames, ", "))
 	sb.WriteString("2. Close each tag before opening the next one\n")
 	sb.WriteString("3. The last tag must be </response>\n")
 	sb.WriteString("4. Replace every uppercase {{PLACEHOLDER}}; never leave braces in the output\n")
@@ -396,7 +402,7 @@ func stripIncompleteTrailingTag(s string) string {
 	if last < 0 {
 		return s
 	}
-	if strings.Index(s[last:], ">") < 0 {
+	if !strings.Contains(s[last:], ">") {
 		return strings.TrimRight(s[:last], " \t\n\r")
 	}
 	return s
@@ -564,24 +570,45 @@ func sanitizePlainTextFieldBody(body string) string {
 	return out.String()
 }
 
-// writeCDATAFillTag writes open tag, CDATA-wrapped placeholder, then close tag.
-// Default for all leaf values so template tags stay separate from field data.
-func writeCDATAFillTag(sb *strings.Builder, indent, tagName, placeholder string) {
-	sb.WriteString(indent)
-	sb.WriteString("<")
-	sb.WriteString(tagName)
-	sb.WriteString(">\n")
-	sb.WriteString(indent)
-	sb.WriteString("<![CDATA[\n")
-	sb.WriteString(indent)
-	sb.WriteString(placeholder)
-	sb.WriteString("\n")
-	sb.WriteString(indent)
-	sb.WriteString("]]>\n")
-	sb.WriteString(indent)
-	sb.WriteString("</")
-	sb.WriteString(tagName)
-	sb.WriteString(">\n")
+// xmlSkeletonChild is one CDATA child inside a map field skeleton.
+type xmlSkeletonChild struct {
+	Tag         string
+	Placeholder string
+}
+
+type xmlSkeletonData struct {
+	Kind        string
+	Tag         string
+	ChildTag    string
+	Placeholder string
+	Children    []xmlSkeletonChild
+}
+
+var xmlFieldSkeleton = template.Must(template.New("xml-field").Parse(`{{if eq .Kind "map"}}  <{{.Tag}}>
+{{range .Children}}    <{{.Tag}}>
+    <![CDATA[
+    {{.Placeholder}}
+    ]]>
+    </{{.Tag}}>
+{{end}}  </{{.Tag}}>
+{{else if eq .Kind "map-empty"}}  <{{.Tag}}>
+  </{{.Tag}}>
+{{else if eq .Kind "array"}}  <{{.Tag}}>
+    <{{.ChildTag}}>
+    <![CDATA[
+    {{.Placeholder}}
+    ]]>
+    </{{.ChildTag}}>
+  </{{.Tag}}>
+{{else}}  <{{.Tag}}>
+  <![CDATA[
+  {{.Placeholder}}
+  ]]>
+  </{{.Tag}}>
+{{end}}`))
+
+func writeXMLFieldSkeleton(sb *strings.Builder, data xmlSkeletonData) error {
+	return xmlFieldSkeleton.Execute(sb, data)
 }
 
 // arrayChildTag chooses the repeated child element name for list fields.

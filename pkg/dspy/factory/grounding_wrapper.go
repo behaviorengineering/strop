@@ -245,7 +245,7 @@ func (g *GroundingLLMWrapper) makeRequest(ctx context.Context, reqBody map[strin
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil && g.logger != nil {
 			g.logger.WithError(closeErr).Warn("Failed to close response body")
 		}
 	}()

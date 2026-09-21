@@ -63,7 +63,7 @@ func TestCreateGeneratorModule_IncludesDirectivesProtocol(t *testing.T) {
 	assert.Contains(t, instruction, "ANTI_PATTERN")
 	outputs := module.GetSignature().Outputs
 	require.NotEmpty(t, outputs)
-	assert.Equal(t, "directives_ack", outputs[0].Field.Name)
+	assert.Equal(t, "directives_ack", outputs[0].Name)
 }
 
 func TestCreateGeneratorModule_WithHumanInstructions(t *testing.T) {

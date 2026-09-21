@@ -15,21 +15,32 @@ type RegenerateOptions struct {
 type optionsKey struct{}
 type researchModeKey struct{}
 
-// WithOptions returns a context that carries opts. Use with RegenerateOptions at service entry.
+// WithOptions returns a context that carries opts.
+// A nil ctx is returned unchanged so callers do not receive a new root context.
 func WithOptions(ctx context.Context, opts RegenerateOptions) context.Context {
+	if ctx == nil {
+		return nil
+	}
 	return context.WithValue(ctx, optionsKey{}, opts)
 }
 
-// FromContext returns the RegenerateOptions from ctx, or zero value if not set.
+// FromContext returns the RegenerateOptions from ctx, or the zero value when unset.
 func FromContext(ctx context.Context) RegenerateOptions {
-	v, _ := ctx.Value(optionsKey{}).(RegenerateOptions)
+	if ctx == nil {
+		return RegenerateOptions{}
+	}
+	v, ok := ctx.Value(optionsKey{}).(RegenerateOptions)
+	if !ok {
+		return RegenerateOptions{}
+	}
 	return v
 }
 
 // WithResearchMode marks ctx so FeedbackNormalizer implementations can prefer research analysis.
+// A nil ctx is returned unchanged.
 func WithResearchMode(ctx context.Context, research bool) context.Context {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil
 	}
 	return context.WithValue(ctx, researchModeKey{}, research)
 }
@@ -39,6 +50,9 @@ func ResearchModeFromContext(ctx context.Context) bool {
 	if ctx == nil {
 		return false
 	}
-	v, _ := ctx.Value(researchModeKey{}).(bool)
+	v, ok := ctx.Value(researchModeKey{}).(bool)
+	if !ok {
+		return false
+	}
 	return v
 }

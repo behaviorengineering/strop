@@ -101,9 +101,8 @@ type LearningArtifact struct {
 	LastEvaluatedAt    *time.Time             `json:"last_evaluated_at,omitempty"`
 }
 
-// LearningService is the portable learning contract used by review flows and JobRunner adapters.
-type LearningService interface {
-	StoreLearning(ctx context.Context, artifact *LearningArtifact) error
+// LearningGeneration retrieves few-shot examples and transferable guides.
+type LearningGeneration interface {
 	GetExamplesForGeneration(
 		ctx context.Context,
 		job Job,
@@ -119,6 +118,11 @@ type LearningService interface {
 		contextMap map[string]interface{},
 		limit int,
 	) ([]string, error)
+}
+
+// LearningMerge stores artifacts and resolves identity matches against conflicts.
+type LearningMerge interface {
+	StoreLearning(ctx context.Context, artifact *LearningArtifact) error
 	FindCandidatesForMerge(
 		ctx context.Context,
 		job Job,
@@ -136,6 +140,10 @@ type LearningService interface {
 		snapshot RetrievalSnapshot,
 	) (matches []*LearningArtifact, conflicts []*LearningArtifact, err error)
 	MergeIntoExisting(ctx context.Context, existingID uuid.UUID, updated *LearningArtifact) error
+}
+
+// LearningObjectives reads and writes the item objective used during generation.
+type LearningObjectives interface {
 	UpsertItemObjective(ctx context.Context, objective *ItemObjective) error
 	GetItemObjective(
 		ctx context.Context,
@@ -143,10 +151,18 @@ type LearningService interface {
 		rootEntityID uuid.UUID,
 		job Job,
 	) (*ItemObjective, error)
+}
+
+// LearningIndex maintains the search documents for approved artifacts.
+type LearningIndex interface {
 	// RemoveFromIndex deletes the artifact from the search index (best-effort after reject/delete).
 	RemoveFromIndex(ctx context.Context, id uuid.UUID) error
 	// ReindexApproved rebuilds search documents for approved generator examples in this pipeline store.
 	ReindexApproved(ctx context.Context) (int, error)
+}
+
+// LearningAccountability records demo use and applies quality decisions.
+type LearningAccountability interface {
 	// RecordDemoUse stores near/contrast IDs for a composition version (no-op if NearID empty).
 	RecordDemoUse(
 		ctx context.Context,
@@ -169,13 +185,36 @@ type LearningService interface {
 	ApplyQualityDecision(ctx context.Context, decision QualityDecision) error
 }
 
-// LearningStore is the portable persistence contract (no vector search).
+// CompositionLearning is the after-approval subset used by the composition learner.
+type CompositionLearning interface {
+	StoreLearning(ctx context.Context, artifact *LearningArtifact) error
+	FindMergePeers(
+		ctx context.Context,
+		job Job,
+		step Step,
+		artifactType string,
+		snapshot RetrievalSnapshot,
+	) (matches []*LearningArtifact, conflicts []*LearningArtifact, err error)
+	MergeIntoExisting(ctx context.Context, existingID uuid.UUID, updated *LearningArtifact) error
+	ListAccountableCandidates(
+		ctx context.Context,
+		rootEntityID uuid.UUID,
+		job Job,
+	) ([]AccountableCandidate, error)
+	ApplyQualityDecision(ctx context.Context, decision QualityDecision) error
+}
+
+// LearningRecords is create, read, update, and delete for learning artifacts.
 // GetByID returns (nil, nil) when the row is missing.
-type LearningStore interface {
+type LearningRecords interface {
 	Create(ctx context.Context, artifact *LearningArtifact) error
 	GetByID(ctx context.Context, id uuid.UUID) (*LearningArtifact, error)
 	Update(ctx context.Context, artifact *LearningArtifact) error
 	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// LearningQueries lists and finds learning artifacts without vector search.
+type LearningQueries interface {
 	GetPendingByEvaluationID(ctx context.Context, evaluationID uuid.UUID) ([]*LearningArtifact, error)
 	// FindByEvaluationJobStepAndType returns an existing row or (nil, nil).
 	FindByEvaluationJobStepAndType(
@@ -185,7 +224,7 @@ type LearningStore interface {
 		step Step,
 		artifactType string,
 	) (*LearningArtifact, error)
-	// ListByEvaluationJobStepAndType returns pending+approved rows for eval/job/step/type.
+	// ListByEvaluationJobStepAndType returns pending and approved rows for eval/job/step/type.
 	ListByEvaluationJobStepAndType(
 		ctx context.Context,
 		evaluationID uuid.UUID,
@@ -200,5 +239,17 @@ type LearningStore interface {
 		artifactType string,
 		contextMap map[string]interface{},
 		limit int,
+	) ([]*LearningArtifact, error)
+}
+
+// CompositionLearningStore is the persistence subset used after approval.
+type CompositionLearningStore interface {
+	Create(ctx context.Context, artifact *LearningArtifact) error
+	ListByEvaluationJobStepAndType(
+		ctx context.Context,
+		evaluationID uuid.UUID,
+		job Job,
+		step Step,
+		artifactType string,
 	) ([]*LearningArtifact, error)
 }

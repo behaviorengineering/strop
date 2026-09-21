@@ -17,7 +17,9 @@
 // ConsolidatorKey; ExpertKey identifies feedback-analysis experts), humanreview
 // (types, maths, builder interfaces, job→step registry, learning pack registry,
 // approval Gate, FeedbackNormalizer, stored-feedback helpers, ScoreProposer,
-// LearningService/LearningStore, ItemObjectiveStore; product jobpacks register
+// LearningGeneration, LearningMerge, LearningObjectives, LearningIndex,
+// LearningAccountability, CompositionLearning, LearningRecords, LearningQueries,
+// CompositionLearningStore, ItemObjectiveStore; product jobpacks register
 // in the app), humanreview/reviewflow (engine + Prompter/Generator/Session/Learner
 // ports), jobskip (Store + Restore) with Labeler/Selector ports; pending-list
 // exclusion is app SQL; concurrency (adaptive in-flight limiter, RunPool);

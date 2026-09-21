@@ -120,13 +120,18 @@ func TestOpenAIVisionLLMWrapper_StreamGenerateWithContent(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
 		require.True(t, ok)
-		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"<response>\"},\"finish_reason\":null}]}\n\n")
+		writeChunk := func(chunk string) {
+			if _, werr := fmt.Fprint(w, chunk); werr != nil {
+				t.Errorf("write stream: %v", werr)
+			}
+		}
+		writeChunk("data: {\"choices\":[{\"delta\":{\"content\":\"<response>\"},\"finish_reason\":null}]}\n\n")
 		flusher.Flush()
-		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n")
+		writeChunk("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n")
 		flusher.Flush()
-		fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"</response>\"},\"finish_reason\":\"stop\"}]}\n\n")
+		writeChunk("data: {\"choices\":[{\"delta\":{\"content\":\"</response>\"},\"finish_reason\":\"stop\"}]}\n\n")
 		flusher.Flush()
-		fmt.Fprintf(w, "data: [DONE]\n\n")
+		writeChunk("data: [DONE]\n\n")
 		flusher.Flush()
 	}))
 	defer server.Close()

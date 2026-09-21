@@ -41,13 +41,13 @@ func (p *fakePack) ValidateCandidate(humanreview.LearningCandidate) bool {
 }
 
 type fakeLearningService struct {
-	matches   []*humanreview.LearningArtifact
-	conflicts []*humanreview.LearningArtifact
-	merged    int
-	stored    int
-	removed   int
+	matches     []*humanreview.LearningArtifact
+	conflicts   []*humanreview.LearningArtifact
+	merged      int
+	stored      int
+	removed     int
 	accountable []humanreview.AccountableCandidate
-	decisions []humanreview.QualityDecision
+	decisions   []humanreview.QualityDecision
 }
 
 func (s *fakeLearningService) StoreLearning(context.Context, *humanreview.LearningArtifact) error {

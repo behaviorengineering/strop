@@ -66,7 +66,7 @@ func ensureDirectivesAckFirst(outputs []core.OutputField, retainRationale bool) 
 	var rationaleField *core.OutputField
 	cleaned := make([]core.OutputField, 0, len(outputs)+1)
 	for _, f := range outputs {
-		name := strings.TrimSpace(f.Field.Name)
+		name := strings.TrimSpace(f.Name)
 		if strings.EqualFold(name, DirectivesAckField) {
 			continue
 		}
@@ -133,7 +133,7 @@ func (c *DirectivesCoT) SetSignature(signature core.Signature) {
 	// Preserve rationale if the caller put it back on the signature.
 	retain := false
 	for _, f := range signature.Outputs {
-		if strings.EqualFold(f.Field.Name, "rationale") {
+		if strings.EqualFold(f.Name, "rationale") {
 			retain = true
 			break
 		}

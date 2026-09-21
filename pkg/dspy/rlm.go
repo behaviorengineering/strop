@@ -3,6 +3,7 @@ package dspy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,44 +77,44 @@ func RLMComplete(ctx context.Context, module *dspyrlm.RLM, contextPayload any, q
 		return "", nil, fmt.Errorf("RLMComplete: module is required")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return "", nil, fmt.Errorf("RLMComplete: context is required")
 	}
 	callID := uuid.NewString()
 	traceDir := strings.TrimSpace(module.Config().TraceDir)
-	if traceDir != "" {
-		_ = appendRLMInputsDump(traceDir, rlmInputsDumpEntry{
-			Type:      "inputs",
-			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-			CallID:    callID,
-			Context:   contextPayload,
-			Query:     query,
-		})
+	if err := recordRLMDump(traceDir, rlmInputsDumpEntry{
+		Type:      "inputs",
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		CallID:    callID,
+		Context:   contextPayload,
+		Query:     query,
+	}); err != nil {
+		return "", nil, err
 	}
 	result, err := module.Complete(ctx, contextPayload, query)
 	if err != nil {
-		if traceDir != "" {
-			_ = appendRLMInputsDump(traceDir, rlmInputsDumpEntry{
-				Type:      "error",
-				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-				CallID:    callID,
-				Query:     query,
-				Error:     err.Error(),
-			})
+		if dumpErr := recordRLMDump(traceDir, rlmInputsDumpEntry{
+			Type:      "error",
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			CallID:    callID,
+			Query:     query,
+			Error:     err.Error(),
+		}); dumpErr != nil {
+			return "", nil, errors.Join(err, dumpErr)
 		}
 		return "", nil, err
 	}
 	if result == nil {
 		return "", nil, fmt.Errorf("RLMComplete: empty result")
 	}
-	if traceDir != "" {
-		_ = appendRLMInputsDump(traceDir, rlmInputsDumpEntry{
-			Type:        "result",
-			Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
-			CallID:      callID,
-			Query:       query,
-			FinalAnswer: result.Response,
-			Iterations:  result.Iterations,
-		})
+	if err := recordRLMDump(traceDir, rlmInputsDumpEntry{
+		Type:        "result",
+		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+		CallID:      callID,
+		Query:       query,
+		FinalAnswer: result.Response,
+		Iterations:  result.Iterations,
+	}); err != nil {
+		return "", nil, err
 	}
 	return result.Response, result, nil
 }
@@ -129,19 +130,34 @@ type rlmInputsDumpEntry struct {
 	Error       string `json:"error,omitempty"`
 }
 
-func appendRLMInputsDump(traceDir string, entry rlmInputsDumpEntry) error {
-	if err := os.MkdirAll(traceDir, 0o755); err != nil {
-		return err
+func recordRLMDump(traceDir string, entry rlmInputsDumpEntry) error {
+	if traceDir == "" {
+		return nil
+	}
+	if err := appendRLMInputsDump(traceDir, entry); err != nil {
+		return fmt.Errorf("RLMComplete: write inputs dump: %w", err)
+	}
+	return nil
+}
+
+func appendRLMInputsDump(traceDir string, entry rlmInputsDumpEntry) (err error) {
+	if mkErr := os.MkdirAll(traceDir, 0o755); mkErr != nil {
+		return mkErr
 	}
 	path := filepath.Join(traceDir, RLMInputsDumpFile)
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
+	f, openErr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if openErr != nil {
+		return openErr
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 	enc := json.NewEncoder(f)
 	enc.SetEscapeHTML(false)
-	return enc.Encode(entry)
+	err = enc.Encode(entry)
+	return err
 }
 
 func rlmOptions(cfg RLMConfig) []dspyrlm.Option {

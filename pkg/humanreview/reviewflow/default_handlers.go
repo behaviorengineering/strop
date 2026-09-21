@@ -218,8 +218,9 @@ func runLearnerAfterApproval(
 		return nil
 	}
 	if learnErr := ports.Learner.AfterApproval(ctx, eval); learnErr != nil {
-		// Fail-open: approval already succeeded; log via engine is not available here.
-		_ = learnErr
+		if ports.OnLearnError != nil {
+			ports.OnLearnError(learnErr)
+		}
 	}
 	return nil
 }

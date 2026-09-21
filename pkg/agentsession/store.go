@@ -3,6 +3,7 @@ package agentsession
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -67,7 +68,9 @@ func (s *Store) Create(ctx context.Context, kind string, extra map[string]any) (
 		Extra:     cloneMap(extra),
 	}
 	if err := s.writeMeta(dir, meta); err != nil {
-		_ = os.RemoveAll(dir)
+		if rmErr := os.RemoveAll(dir); rmErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("agentsession: cleanup session dir: %w", rmErr))
+		}
 		return nil, err
 	}
 	return meta, nil
@@ -124,7 +127,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]Meta, error) {
 }
 
 // AppendTurn appends one JSON line to transcript.jsonl and bumps UpdatedAt.
-func (s *Store) AppendTurn(ctx context.Context, id string, turn Turn) error {
+func (s *Store) AppendTurn(ctx context.Context, id string, turn Turn) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -157,7 +160,11 @@ func (s *Store) AppendTurn(ctx context.Context, id string, turn Turn) error {
 	if err != nil {
 		return fmt.Errorf("agentsession: open transcript: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("agentsession: close transcript: %w", cerr)
+		}
+	}()
 	if _, err := f.Write(append(line, '\n')); err != nil {
 		return fmt.Errorf("agentsession: write transcript: %w", err)
 	}

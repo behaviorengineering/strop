@@ -95,10 +95,10 @@ func (silentLog) WithFields(map[string]interface{}) stroplog.Logger {
 	return silentLog{}
 }
 func (silentLog) WithError(error) stroplog.Logger { return silentLog{} }
-func (silentLog) Debug(...interface{})          {}
-func (silentLog) Info(...interface{})           {}
-func (silentLog) Warn(...interface{})           {}
-func (silentLog) Error(...interface{})          {}
+func (silentLog) Debug(...interface{})            {}
+func (silentLog) Info(...interface{})             {}
+func (silentLog) Warn(...interface{})             {}
+func (silentLog) Error(...interface{})            {}
 
 func TestGate_StartResumeAndRecordAlignmentDoesNotChangeStatus(t *testing.T) {
 	DefaultJobStepRegistry().Register("my_job", "my_step")

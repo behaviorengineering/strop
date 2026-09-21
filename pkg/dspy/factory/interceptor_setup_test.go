@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/behaviorengineering/strop/pkg/runreport"
-
 	stropdspy "github.com/behaviorengineering/strop/pkg/dspy"
 	dspymodules "github.com/behaviorengineering/strop/pkg/dspy/modules"
 	"github.com/behaviorengineering/strop/pkg/dspy/tracing"
@@ -36,19 +34,13 @@ func TestXMLInterceptorIssue_ReplicatesProductionBug(t *testing.T) {
 
 	// Setup interceptors in the SAME ORDER as production.
 	var logger stroplog.Logger
-	setup := NewInterceptorSetup(
-		true, // openInferenceEnabled.
-		"test-service",
-		nil, // retryConfig.
-		0,   // timeout.
-		tracing.OpenInferenceModuleInterceptor,
-		logger,
-		func(modelID string) string { return "test-provider" },
-		nil, // modelIDByModuleName - not needed for this test.
-		nil, // onRegisterModuleModel - not needed for this test.
-		nil, // inputProcessorFactory - not needed for this test.
-		runreport.Config{},
-	)
+	setup := NewInterceptorSetup(InterceptorSetupConfig{
+		OpenInferenceEnabled:           true,
+		OpenInferenceServiceName:       "test-service",
+		CreateOpenInferenceInterceptor: tracing.OpenInferenceModuleInterceptor,
+		Logger:                         logger,
+		ProviderLookup:                 func(modelID string) string { return "test-provider" },
+	})
 
 	// Add interceptors FIRST (same as production).
 	setup.AddInterceptors(module, stropdspy.ProviderConfig{})
@@ -371,11 +363,11 @@ func TestEnableStructuredOutput_ClearsPredictDSPyXMLInterceptors(t *testing.T) {
 	require.True(t, predict.IsXMLModeEnabled(), "NewPredict should enable XML for multi-output signatures")
 	require.NotEmpty(t, predict.GetInterceptors(), "dspy-go attaches XML interceptor by default")
 
-	setup := NewInterceptorSetup(false, "", nil, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
+	setup := NewInterceptorSetup(InterceptorSetupConfig{})
 	setup.enablePredictRawXMLPassthrough(module, predict)
 	require.Empty(t, predict.GetInterceptors(), "passthrough must strip dspy-go XML parse from Predict")
 
-	setup2 := NewInterceptorSetup(false, "", nil, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
+	setup2 := NewInterceptorSetup(InterceptorSetupConfig{})
 	setup2.EnableStructuredOutput(module, predict)
 	require.Len(t, predict.GetInterceptors(), 2, "Predict should have validation + custom structured output interceptors only")
 }
@@ -402,7 +394,7 @@ func TestEnableStructuredOutput_PreservesRetryAfterAddInterceptors(t *testing.T)
 		Delay:       time.Millisecond,
 		Backoff:     1,
 	}
-	setup := NewInterceptorSetup(false, "", retryConfig, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
+	setup := NewInterceptorSetup(InterceptorSetupConfig{RetryConfig: retryConfig})
 	setup.AddInterceptors(module, stropdspy.ProviderConfig{})
 	afterReliability := len(module.GetInterceptors())
 	require.Greater(t, afterReliability, 0, "AddInterceptors should attach retry/runreport")
@@ -415,14 +407,14 @@ func TestEnableStructuredOutput_PreservesRetryAfterAddInterceptors(t *testing.T)
 
 func TestInterceptorSetup_RegisterMandatoryFieldsOverridesDefault(t *testing.T) {
 	t.Parallel()
-	setup := NewInterceptorSetup(false, "", nil, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
+	setup := NewInterceptorSetup(InterceptorSetupConfig{})
 	setup.RegisterMandatoryFields("Chapter Ideas", []string{"main_idea"})
 	require.NotNil(t, setup.outputValidators["Chapter Ideas"])
 }
 
 func TestInterceptorSetup_RegisterRequiredInputs(t *testing.T) {
 	t.Parallel()
-	setup := NewInterceptorSetup(false, "", nil, 0, nil, nil, nil, nil, nil, nil, runreport.Config{})
+	setup := NewInterceptorSetup(InterceptorSetupConfig{})
 	setup.RegisterRequiredInputs("bootstrap_story", []string{"repo_id", "readme_snapshot"})
 	require.Equal(t, []string{"repo_id", "readme_snapshot"}, setup.requiredInputs["bootstrap_story"])
 	proc := setup.composeInputProcessor("bootstrap_story", stropdspy.ProviderConfig{})

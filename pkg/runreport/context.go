@@ -13,8 +13,10 @@ var (
 	defaultConfig = Config{}.Defaults()
 )
 
-// SetDefaultConfig stores app-wide run-report settings (from loaded config at startup).
-// ConfigFromContext falls back to this when ctx has no explicit override.
+// SetDefaultConfig stores the process-wide run-report settings used when a
+// context has no explicit override. Hosts should set it once at startup.
+// Concurrent readers and writers are synchronized. Tests that change it should
+// restore the previous config so later tests do not inherit it.
 func SetDefaultConfig(cfg Config) {
 	configMu.Lock()
 	defaultConfig = cfg.Defaults()
@@ -52,7 +54,10 @@ func CollectorFromContext(ctx context.Context) *Collector {
 	if ctx == nil {
 		return nil
 	}
-	c, _ := ctx.Value(collectorKey{}).(*Collector)
+	c, ok := ctx.Value(collectorKey{}).(*Collector)
+	if !ok {
+		return nil
+	}
 	return c
 }
 
