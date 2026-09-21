@@ -3,7 +3,7 @@ package orchestration
 import (
 	"context"
 
-	"github.com/behaviorengineering/strop/streaming"
+	"github.com/behaviorengineering/strop/pkg/streaming"
 )
 
 // CompensationAttempt records one generate+gate try during normal phase retries.
