@@ -31,21 +31,22 @@ type BulletRequest struct {
 
 // SelectBullets keeps bullets in the requested scope, split by polarity, in id order.
 func SelectBullets(bullets []Bullet, req BulletRequest) ([]Bullet, error) {
+	const op = "skills.SelectBullets"
 	scope := strings.TrimSpace(req.Scope)
 	if scope == "" {
-		return nil, invalid("playbook scope is required")
+		return nil, invalid(op, "playbook scope is required")
 	}
-	helpfulCap, err := normalizeCap(req.HelpfulCap, DefaultBulletCap, MaxBulletCap, "helpful cap")
+	helpfulCap, err := normalizeCap(op, req.HelpfulCap, DefaultBulletCap, MaxBulletCap, "helpful cap")
 	if err != nil {
 		return nil, err
 	}
-	harmfulCap, err := normalizeCap(req.HarmfulCap, DefaultBulletCap, MaxBulletCap, "harmful cap")
+	harmfulCap, err := normalizeCap(op, req.HarmfulCap, DefaultBulletCap, MaxBulletCap, "harmful cap")
 	if err != nil {
 		return nil, err
 	}
 	var helpful, harmful []Bullet
 	for _, bullet := range bullets {
-		cleaned, err := normalizeBullet(bullet)
+		cleaned, err := normalizeBullet(op, bullet)
 		if err != nil {
 			return nil, err
 		}
@@ -73,23 +74,23 @@ func SelectBullets(bullets []Bullet, req BulletRequest) ([]Bullet, error) {
 	return out, nil
 }
 
-func normalizeBullet(b Bullet) (Bullet, error) {
+func normalizeBullet(op string, b Bullet) (Bullet, error) {
 	b.ID = strings.TrimSpace(b.ID)
 	if b.ID == "" || len(b.ID) > maxIDLen || strings.ContainsAny(b.ID, " \t\n") {
-		return Bullet{}, invalid("bullet id must be a token")
+		return Bullet{}, invalid(op, "bullet id must be a token")
 	}
 	b.Scope = strings.TrimSpace(b.Scope)
 	if b.Scope == "" || strings.ContainsAny(b.Scope, " \t\n") {
-		return Bullet{}, invalid("bullet scope must be a token")
+		return Bullet{}, invalid(op, "bullet scope must be a token")
 	}
 	b.Text = strings.TrimSpace(b.Text)
 	if b.Text == "" || len(b.Text) > maxBulletText {
-		return Bullet{}, invalid("bullet text must be a short line")
+		return Bullet{}, invalid(op, "bullet text must be a short line")
 	}
 	switch b.Polarity {
 	case PolarityHelpful, PolarityHarmful:
 	default:
-		return Bullet{}, invalid("bullet polarity is not recognized")
+		return Bullet{}, invalid(op, "bullet polarity is not recognized")
 	}
 	return b, nil
 }

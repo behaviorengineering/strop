@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,11 @@ func TestSelectHardFiltersAndCap(t *testing.T) {
 		Cap:         MaxSkillCap + 1,
 	})
 	require.ErrorIs(t, err, ErrInvalid)
+	var structured *Error
+	require.ErrorAs(t, err, &structured)
+	require.Equal(t, CodeInvalid, structured.Code)
+	require.Equal(t, "skills.Select", structured.Op)
+	require.ErrorIs(t, errors.Unwrap(structured), ErrInvalid)
 }
 
 func TestRegisterRejectsDuplicateAndFreeText(t *testing.T) {

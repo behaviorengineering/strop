@@ -57,15 +57,16 @@ func NewRegistry() *Registry {
 
 // Register copies s into the registry. A second register of the same id fails.
 func (r *Registry) Register(s Skill) error {
+	const op = "skills.Registry.Register"
 	if r == nil {
-		return invalid("nil registry")
+		return invalid(op, "nil registry")
 	}
-	cleaned, err := normalizeSkill(s)
+	cleaned, err := normalizeSkill(op, s)
 	if err != nil {
 		return err
 	}
 	if _, exists := r.byID[cleaned.ID]; exists {
-		return invalid("duplicate skill id " + cleaned.ID)
+		return invalidField(op, "duplicate skill id", "id", cleaned.ID)
 	}
 	r.byID[cleaned.ID] = cleaned
 	return nil
@@ -92,30 +93,30 @@ func (r *Registry) Len() int {
 	return len(r.byID)
 }
 
-func normalizeSkill(s Skill) (Skill, error) {
+func normalizeSkill(op string, s Skill) (Skill, error) {
 	s.ID = strings.TrimSpace(s.ID)
 	if !skillIDPattern.MatchString(s.ID) || len(s.ID) > maxIDLen {
-		return Skill{}, invalid("skill id must be a dotted token")
+		return Skill{}, invalid(op, "skill id must be a dotted token")
 	}
 	s.Version = strings.TrimSpace(s.Version)
 	if s.Version == "" || len(s.Version) > maxVersionLen || strings.ContainsAny(s.Version, " \t\n") {
-		return Skill{}, invalid("skill version is required")
+		return Skill{}, invalid(op, "skill version is required")
 	}
 	s.Description = strings.TrimSpace(s.Description)
 	if s.Description == "" || len(s.Description) > maxDescription {
-		return Skill{}, invalid("skill description must be a short sentence")
+		return Skill{}, invalid(op, "skill description must be a short sentence")
 	}
 	switch s.SideEffect {
 	case SideEffectNone, SideEffectRead, SideEffectWrite:
 	default:
-		return Skill{}, invalid("skill side effect is not recognized")
+		return Skill{}, invalid(op, "skill side effect is not recognized")
 	}
 	stages := make([]string, 0, len(s.Stages))
 	seen := map[string]struct{}{}
 	for _, stage := range s.Stages {
 		stage = strings.TrimSpace(stage)
 		if stage == "" || strings.ContainsAny(stage, " \t\n") {
-			return Skill{}, invalid("skill stage must be a token")
+			return Skill{}, invalid(op, "skill stage must be a token")
 		}
 		if _, ok := seen[stage]; ok {
 			continue

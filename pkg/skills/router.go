@@ -23,14 +23,15 @@ type Selection struct {
 // Select applies stage, side effect, and allow-list filters, then caps the result.
 // Order is skill id order. That order is not a rank.
 func Select(reg *Registry, req Request) (Selection, error) {
+	const op = "skills.Select"
 	if reg == nil {
-		return Selection{}, invalid("nil registry")
+		return Selection{}, invalid(op, "nil registry")
 	}
 	stage := strings.TrimSpace(req.Stage)
 	if stage == "" {
-		return Selection{}, invalid("stage is required")
+		return Selection{}, invalid(op, "stage is required")
 	}
-	cap, err := normalizeCap(req.Cap, DefaultSkillCap, MaxSkillCap, "skill cap")
+	cap, err := normalizeCap(op, req.Cap, DefaultSkillCap, MaxSkillCap, "skill cap")
 	if err != nil {
 		return Selection{}, err
 	}
@@ -38,14 +39,14 @@ func Select(reg *Registry, req Request) (Selection, error) {
 	for _, id := range req.Allow {
 		id = strings.TrimSpace(id)
 		if id == "" {
-			return Selection{}, invalid("allow list has an empty skill id")
+			return Selection{}, invalid(op, "allow list has an empty skill id")
 		}
 		allowed[id] = struct{}{}
 	}
 	effects := map[SideEffect]struct{}{}
 	for _, effect := range req.SideEffects {
 		if !knownSideEffect(effect) {
-			return Selection{}, invalid("side effect is not recognized")
+			return Selection{}, invalid(op, "side effect is not recognized")
 		}
 		effects[effect] = struct{}{}
 	}
@@ -89,12 +90,12 @@ func stageAllows(skill Skill, stage string) bool {
 	return slices.Contains(skill.Stages, stage)
 }
 
-func normalizeCap(cap, fallback, max int, label string) (int, error) {
+func normalizeCap(op string, cap, fallback, max int, label string) (int, error) {
 	if cap == 0 {
 		return fallback, nil
 	}
 	if cap < 0 || cap > max {
-		return 0, invalid(label + " is out of range")
+		return 0, invalid(op, label+" is out of range")
 	}
 	return cap, nil
 }

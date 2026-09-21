@@ -13,30 +13,31 @@ type Trajectory struct {
 
 // Validate checks the record shape. An empty skill list is valid.
 func (t Trajectory) Validate() error {
+	const op = "skills.Trajectory.Validate"
 	if strings.TrimSpace(t.TaskID) == "" {
-		return invalid("trajectory task id is required")
+		return invalid(op, "task id is required")
 	}
 	if strings.TrimSpace(t.Stage) == "" || strings.ContainsAny(t.Stage, " \t\n") {
-		return invalid("trajectory stage must be a token")
+		return invalid(op, "stage must be a token")
 	}
-	if err := uniqueTokens(t.SkillIDs, "skill id"); err != nil {
+	if err := uniqueTokens(op, t.SkillIDs, "skill id"); err != nil {
 		return err
 	}
-	if err := uniqueTokens(t.BulletIDs, "bullet id"); err != nil {
+	if err := uniqueTokens(op, t.BulletIDs, "bullet id"); err != nil {
 		return err
 	}
 	return nil
 }
 
-func uniqueTokens(ids []string, label string) error {
+func uniqueTokens(op string, ids []string, label string) error {
 	seen := map[string]struct{}{}
 	for _, id := range ids {
 		id = strings.TrimSpace(id)
 		if id == "" || strings.ContainsAny(id, " \t\n") {
-			return invalid("trajectory " + label + " must be a token")
+			return invalid(op, label+" must be a token")
 		}
 		if _, ok := seen[id]; ok {
-			return invalid("trajectory duplicate " + label + " " + id)
+			return invalidField(op, "duplicate "+label, label, id)
 		}
 		seen[id] = struct{}{}
 	}
