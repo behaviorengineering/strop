@@ -24,14 +24,14 @@ func TestDirectivesCoT_AckFirstNoRationale(t *testing.T) {
 		t.Fatalf("type=%q", mod.GetModuleType())
 	}
 	got := mod.GetSignature()
-	if len(got.Outputs) < 2 || got.Outputs[0].Field.Name != dspymodules.DirectivesAckField {
+	if len(got.Outputs) < 2 || got.Outputs[0].Name != dspymodules.DirectivesAckField {
 		t.Fatalf("outputs=%+v", got.Outputs)
 	}
-	if got.Outputs[1].Field.Name != "summary" {
-		t.Fatalf("second=%q", got.Outputs[1].Field.Name)
+	if got.Outputs[1].Name != "summary" {
+		t.Fatalf("second=%q", got.Outputs[1].Name)
 	}
 	for _, f := range got.Outputs {
-		if f.Field.Name == "rationale" {
+		if f.Name == "rationale" {
 			t.Fatal("rationale must not appear when RetainRationaleAsTaskField is false")
 		}
 	}
@@ -61,14 +61,14 @@ func TestDirectivesCoT_RetainRationaleAsTaskField(t *testing.T) {
 	if len(got.Outputs) != 3 {
 		t.Fatalf("want 3 outputs, got %+v", got.Outputs)
 	}
-	if got.Outputs[0].Field.Name != dspymodules.DirectivesAckField {
-		t.Fatalf("first=%q", got.Outputs[0].Field.Name)
+	if got.Outputs[0].Name != dspymodules.DirectivesAckField {
+		t.Fatalf("first=%q", got.Outputs[0].Name)
 	}
-	if got.Outputs[1].Field.Name != "rationale" {
-		t.Fatalf("second=%q want rationale", got.Outputs[1].Field.Name)
+	if got.Outputs[1].Name != "rationale" {
+		t.Fatalf("second=%q want rationale", got.Outputs[1].Name)
 	}
-	if got.Outputs[2].Field.Name != "description" {
-		t.Fatalf("third=%q", got.Outputs[2].Field.Name)
+	if got.Outputs[2].Name != "description" {
+		t.Fatalf("third=%q", got.Outputs[2].Name)
 	}
 }
 

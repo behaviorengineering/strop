@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	dspymodules 	"github.com/behaviorengineering/strop/pkg/dspy/modules"
+	dspymodules "github.com/behaviorengineering/strop/pkg/dspy/modules"
 	"github.com/behaviorengineering/strop/pkg/evaluation/criteria"
 	"github.com/behaviorengineering/strop/pkg/streaming"
 

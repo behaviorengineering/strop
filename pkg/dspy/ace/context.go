@@ -18,7 +18,10 @@ func FromContext(ctx context.Context) *Manager {
 	if ctx == nil {
 		return nil
 	}
-	m, _ := ctx.Value(managerKey{}).(*Manager)
+	m, ok := ctx.Value(managerKey{}).(*Manager)
+	if !ok {
+		return nil
+	}
 	return m
 }
 
@@ -35,6 +38,9 @@ func RecorderFromContext(ctx context.Context) *TrajectoryRecorder {
 	if ctx == nil {
 		return nil
 	}
-	r, _ := ctx.Value(recorderKey{}).(*TrajectoryRecorder)
+	r, ok := ctx.Value(recorderKey{}).(*TrajectoryRecorder)
+	if !ok {
+		return nil
+	}
 	return r
 }

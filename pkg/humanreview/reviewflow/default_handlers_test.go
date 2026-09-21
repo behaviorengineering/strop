@@ -20,10 +20,10 @@ type silentLog struct{}
 func (silentLog) WithField(string, interface{}) stroplog.Logger     { return silentLog{} }
 func (silentLog) WithFields(map[string]interface{}) stroplog.Logger { return silentLog{} }
 func (silentLog) WithError(error) stroplog.Logger                   { return silentLog{} }
-func (silentLog) Debug(...interface{})                            {}
-func (silentLog) Info(...interface{})                             {}
-func (silentLog) Warn(...interface{})                             {}
-func (silentLog) Error(...interface{})                            {}
+func (silentLog) Debug(...interface{})                              {}
+func (silentLog) Info(...interface{})                               {}
+func (silentLog) Warn(...interface{})                               {}
+func (silentLog) Error(...interface{})                              {}
 
 type memStore struct {
 	mu    sync.Mutex
@@ -245,6 +245,7 @@ func TestDefaultHandlers_compositionJobCallsLearner(t *testing.T) {
 		CriterionIDs: []criteria.CriterionID{"quality"},
 	}
 	e := NewEngine(Config{Start: StateInit})
+	var learned error
 	RegisterDefaultHandlers(e, Ports{
 		Prompter:     fp,
 		Generator:    fp,
@@ -253,10 +254,12 @@ func TestDefaultHandlers_compositionJobCallsLearner(t *testing.T) {
 		PipelineType: "demo",
 		Learner:      learner,
 		Packs:        packs,
+		OnLearnError: func(err error) { learned = err },
 	}, run)
 	require.NoError(t, e.Run(context.Background()))
 	assert.True(t, fp.approved)
 	assert.Equal(t, 1, learner.calls)
+	assert.ErrorIs(t, learned, assert.AnError)
 }
 
 func TestDefaultHandlers_nonCompositionJobSkipsLearner(t *testing.T) {

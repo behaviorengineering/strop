@@ -41,7 +41,11 @@ func TestThinkingRoundTripperAddsEnableThinking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("round trip: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			t.Errorf("close response: %v", cerr)
+		}
+	}()
 
 	var payload map[string]any
 	if err := json.Unmarshal(capture.body, &payload); err != nil {
@@ -72,7 +76,11 @@ func TestThinkingRoundTripperLeavesNonChatRequestsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("round trip: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			t.Errorf("close response: %v", cerr)
+		}
+	}()
 
 	if string(capture.body) != body {
 		t.Fatalf("forwarded body = %s, want %s", capture.body, body)

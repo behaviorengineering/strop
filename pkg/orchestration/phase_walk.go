@@ -86,9 +86,9 @@ type phaseWalkStrategy struct {
 	emptyErr    error
 	mergeOnFail bool
 
-	scores       []float64
-	passedEvals  []evaluation.LabeledEval
-	rationales   []string
+	scores      []float64
+	passedEvals []evaluation.LabeledEval
+	rationales  []string
 
 	lastFailed map[string]map[string]string // phaseID → fields from last failing attempt
 }

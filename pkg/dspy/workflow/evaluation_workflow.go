@@ -971,14 +971,14 @@ func (w *ParallelEvaluationWorkflow) buildConsolidatorInputs(
 ) map[string]interface{} {
 	var feedbacksBuilder strings.Builder
 	for _, eval := range individualEvals {
-		feedbacksBuilder.WriteString(fmt.Sprintf("=== %s (%.1f/10) ===\n", eval.AgentName, eval.Score))
+		fmt.Fprintf(&feedbacksBuilder, "=== %s (%.1f/10) ===\n", eval.AgentName, eval.Score)
 		feedbacksBuilder.WriteString(eval.Feedback)
 		feedbacksBuilder.WriteString("\n\n")
 	}
 
 	var scoresBuilder strings.Builder
 	for agent, score := range agentScores {
-		scoresBuilder.WriteString(fmt.Sprintf("- %s: %.1f/10\n", agent, score))
+		fmt.Fprintf(&scoresBuilder, "- %s: %.1f/10\n", agent, score)
 	}
 
 	consolidatorInputs := map[string]interface{}{

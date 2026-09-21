@@ -1,6 +1,7 @@
 package dspy_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ func TestRLMConfigCreateModuleRequiresLLM(t *testing.T) {
 }
 
 func TestRLMCompleteRequiresModule(t *testing.T) {
-	_, _, err := stropdspy.RLMComplete(nil, nil, "ctx", "query")
+	_, _, err := stropdspy.RLMComplete(context.Background(), nil, "ctx", "query")
 	if err == nil {
 		t.Fatal("expected error for nil module")
 	}
