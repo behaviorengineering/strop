@@ -28,7 +28,7 @@
 // (and each per-item round) is one ACE trajectory. The loop StartTrajectory / RecordStep /
 // EndTrajectory; JobRunner injects LearningsContext into retrieved_guides. CatchInterceptor
 // records module Process errors. Host owns NewManager/Close for the session. ACE is not
-// runreport and not humanreview.LearningService (few-shot demos). RLM Complete is a later edge.
+// runreport and not humanreview.CompositionLearning (few-shot demos). RLM Complete is a later edge.
 //
 // Pipelines implement RefinementStrategy and call RunRefinementLoop instead of duplicating the recursive loop.
 // CompositionStrategy may nest inside each refinement version.

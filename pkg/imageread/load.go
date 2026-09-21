@@ -47,24 +47,28 @@ func loadFile(path string) ([]byte, string, error) {
 	return data, mimeFromPath(abs), nil
 }
 
-func loadHTTP(url string) ([]byte, string, error) {
+func loadHTTP(url string) (data []byte, mime string, err error) {
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, "", fmt.Errorf("fetch image URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close image response: %w", cerr)
+		}
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, "", fmt.Errorf("fetch image URL: HTTP %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
 	if err != nil {
 		return nil, "", fmt.Errorf("read image response: %w", err)
 	}
 	if len(data) > maxImageBytes {
 		return nil, "", fmt.Errorf("image download exceeds %d bytes", maxImageBytes)
 	}
-	mime := resp.Header.Get("Content-Type")
+	mime = resp.Header.Get("Content-Type")
 	if idx := strings.Index(mime, ";"); idx >= 0 {
 		mime = mime[:idx]
 	}

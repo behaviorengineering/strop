@@ -146,7 +146,9 @@ func RunStepPlan(
 			result.AttemptsOnFail = attempts
 			result.Err = err
 			runErr = err
-			_ = markPlanStatus(ctx, store, plan, stepplan.PlanStatusFailed)
+			if statusErr := markPlanStatus(ctx, store, plan, stepplan.PlanStatusFailed); statusErr != nil {
+				return result, errors.Join(err, statusErr)
+			}
 			return result, err
 		}
 		if completed {
@@ -192,14 +194,7 @@ func runOneStep(
 			maxAttempts,
 		))
 
-		stepCtx := ctx
-		cancel := func() {}
-		if step.Budget.Timeout > 0 {
-			stepCtx, cancel = context.WithTimeout(ctx, step.Budget.Timeout)
-		}
-
-		out, runErr := runner.RunStep(stepCtx, plan, step)
-		cancel()
+		out, runErr := runPlanStep(ctx, runner, plan, step)
 		if runErr != nil {
 			lastErr = fmt.Errorf("orchestration: step %q: %w", step.ID, runErr)
 			if !retryAfterError(ctx, lastErr, attempt, maxAttempts, classify, sleep, eventChan, plan.ID, step.ID) {
@@ -318,6 +313,16 @@ func shouldSkipStep(ctx context.Context, store stepplan.Store, planID string, st
 		return true
 	}
 	return cp.InputFingerprint == "" || cp.InputFingerprint == want
+}
+
+func runPlanStep(ctx context.Context, runner StepRunner, plan *stepplan.Plan, step stepplan.Step) (*StepRunResult, error) {
+	stepCtx := ctx
+	if step.Budget.Timeout > 0 {
+		var cancel context.CancelFunc
+		stepCtx, cancel = context.WithTimeout(ctx, step.Budget.Timeout)
+		defer cancel()
+	}
+	return runner.RunStep(stepCtx, plan, step)
 }
 
 func markPlanStatus(ctx context.Context, store stepplan.Store, plan *stepplan.Plan, status string) error {

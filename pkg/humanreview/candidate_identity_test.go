@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/behaviorengineering/strop/pkg/humanreview"
 )
@@ -11,32 +12,36 @@ import (
 func TestCandidateIdentityKey_sectionAndPrinciple(t *testing.T) {
 	t.Parallel()
 
-	sectionA := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeGeneratorExample, map[string]interface{}{
+	sectionA, err := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeGeneratorExample, map[string]interface{}{
 		"job":  "post_polish_generation",
 		"step": "post_polish",
 		"context": map[string]interface{}{
 			"section_id": "tldr",
 		},
 	})
-	sectionB := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeGeneratorExample, map[string]interface{}{
+	require.NoError(t, err)
+	sectionB, err := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeGeneratorExample, map[string]interface{}{
 		"job":  "post_polish_generation",
 		"step": "post_polish",
 		"context": map[string]interface{}{
 			"section_id": "fluff",
 		},
 	})
+	require.NoError(t, err)
 	assert.NotEqual(t, sectionA, sectionB)
 
-	guideA := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeContentRule, map[string]interface{}{
+	guideA, err := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeContentRule, map[string]interface{}{
 		"job":       "translation_generation",
 		"step":      "translate",
 		"principle": "Keep proverb meaning first",
 	})
-	guideB := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeContentRule, map[string]interface{}{
+	require.NoError(t, err)
+	guideB, err := humanreview.CandidateIdentityKey(humanreview.ArtifactTypeContentRule, map[string]interface{}{
 		"job":       "translation_generation",
 		"step":      "translate",
 		"principle": "Prefer concrete imagery",
 	})
+	require.NoError(t, err)
 	assert.NotEqual(t, guideA, guideB)
 	assert.True(t, humanreview.HasCandidateIdentity([]*humanreview.LearningArtifact{{
 		ArtifactType:    humanreview.ArtifactTypeContentRule,

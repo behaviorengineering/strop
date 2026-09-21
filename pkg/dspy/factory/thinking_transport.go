@@ -36,11 +36,13 @@ func (t thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return t.roundTrip(req)
 	}
 
-	defer req.Body.Close()
-
 	body, err := io.ReadAll(req.Body)
+	closeErr := req.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("read chat completion request: %w", err)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close chat completion request: %w", closeErr)
 	}
 
 	var payload map[string]any

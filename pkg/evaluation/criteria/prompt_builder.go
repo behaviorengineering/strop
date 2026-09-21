@@ -185,7 +185,7 @@ func (pb *PromptBuilder) buildCriterionIDMapping(criteria []CriterionDescription
 	var sb strings.Builder
 	sb.WriteString("CRITERION ID MAPPING (use these exact IDs in criterion_scores output):\n")
 	for _, crit := range criteria {
-		sb.WriteString(fmt.Sprintf("- %s → %q\n", crit.Name, string(crit.ID)))
+		fmt.Fprintf(&sb, "- %s → %q\n", crit.Name, string(crit.ID))
 	}
 	sb.WriteString("\n") // Add trailing newline for formatting.
 	return sb.String()
@@ -220,19 +220,19 @@ func (pb *PromptBuilder) buildRubricSection(processCriteria, qualityCriteria []C
 
 	// Process Evaluation section.
 	if len(processCriteria) > 0 {
-		sb.WriteString(fmt.Sprintf("%s (%.0f points total):\n", CriterionCategoryProcessEvaluation, processPoints))
+		fmt.Fprintf(&sb, "%s (%.0f points total):\n", CriterionCategoryProcessEvaluation, processPoints)
 		for i, crit := range processCriteria {
-			sb.WriteString(fmt.Sprintf("%d. %s (0-%.0f points):\n", i+1, crit.Name, crit.MaxPoints))
-			sb.WriteString(fmt.Sprintf("   %s\n", crit.Description))
+			fmt.Fprintf(&sb, "%d. %s (0-%.0f points):\n", i+1, crit.Name, crit.MaxPoints)
+			fmt.Fprintf(&sb, "   %s\n", crit.Description)
 			// Parse scoring levels from the Scoring field.
 			scoringLevels := pb.parseScoringLevels(crit.Scoring)
 			for _, level := range scoringLevels {
-				sb.WriteString(fmt.Sprintf("   - %s\n", level))
+				fmt.Fprintf(&sb, "   - %s\n", level)
 			}
 			// Add evidence placeholder based on category.
 			evidence := pb.getEvidencePlaceholder(crit)
 			if evidence != "" {
-				sb.WriteString(fmt.Sprintf("   - Evidence: %s\n", evidence))
+				fmt.Fprintf(&sb, "   - Evidence: %s\n", evidence)
 			}
 			sb.WriteString("\n")
 		}
@@ -241,21 +241,21 @@ func (pb *PromptBuilder) buildRubricSection(processCriteria, qualityCriteria []C
 	// Output Quality Evaluation section.
 	if len(qualityCriteria) > 0 {
 		startNum := len(processCriteria) + 1
-		sb.WriteString(fmt.Sprintf("%s (%.0f points total):\n", CriterionCategoryOutputQuality, qualityPoints))
+		fmt.Fprintf(&sb, "%s (%.0f points total):\n", CriterionCategoryOutputQuality, qualityPoints)
 		for i, crit := range qualityCriteria {
-			sb.WriteString(fmt.Sprintf("%d. %s (0-%.0f points):\n", startNum+i, crit.Name, crit.MaxPoints))
-			sb.WriteString(fmt.Sprintf("   %s\n", crit.Description))
+			fmt.Fprintf(&sb, "%d. %s (0-%.0f points):\n", startNum+i, crit.Name, crit.MaxPoints)
+			fmt.Fprintf(&sb, "   %s\n", crit.Description)
 			scoringLevels := pb.parseScoringLevels(crit.Scoring)
 			for _, level := range scoringLevels {
-				sb.WriteString(fmt.Sprintf("   - %s\n", level))
+				fmt.Fprintf(&sb, "   - %s\n", level)
 			}
 			// Include examples for output quality criteria to help evaluators identify violations.
 			if crit.Examples != "" {
-				sb.WriteString(fmt.Sprintf("   Examples:\n%s\n", crit.Examples))
+				fmt.Fprintf(&sb, "   Examples:\n%s\n", crit.Examples)
 			}
 			evidence := pb.getEvidencePlaceholder(crit)
 			if evidence != "" {
-				sb.WriteString(fmt.Sprintf("   - Evidence: %s\n", evidence))
+				fmt.Fprintf(&sb, "   - Evidence: %s\n", evidence)
 			}
 			sb.WriteString("\n")
 		}
@@ -411,7 +411,7 @@ func (pb *PromptBuilder) buildScoreBreakdownFormat(criteria []CriterionDescripti
 		if crit.ID == CriterionIDFeedbackAdherence {
 			optionalNote = " (if applicable)"
 		}
-		sb.WriteString(fmt.Sprintf("- %s: {points} of %.0f max - [brief explanation]%s\n", crit.Name, crit.MaxPoints, optionalNote))
+		fmt.Fprintf(&sb, "- %s: {points} of %.0f max - [brief explanation]%s\n", crit.Name, crit.MaxPoints, optionalNote)
 	}
 
 	return sb.String()
@@ -805,9 +805,9 @@ func (pb *PromptBuilder) buildRubricSectionForReference(criteria []CriterionDesc
 
 	// List process criteria concisely (name + description only).
 	if len(processCriteria) > 0 {
-		sb.WriteString(fmt.Sprintf("%s:\n", CriterionCategoryProcessEvaluation))
+		fmt.Fprintf(&sb, "%s:\n", CriterionCategoryProcessEvaluation)
 		for i, crit := range processCriteria {
-			sb.WriteString(fmt.Sprintf("%d. %s: %s\n", i+1, crit.Name, crit.Description))
+			fmt.Fprintf(&sb, "%d. %s: %s\n", i+1, crit.Name, crit.Description)
 		}
 		sb.WriteString("\n")
 	}
@@ -815,9 +815,9 @@ func (pb *PromptBuilder) buildRubricSectionForReference(criteria []CriterionDesc
 	// List output quality criteria concisely (name + description only).
 	if len(qualityCriteria) > 0 {
 		startNum := len(processCriteria) + 1
-		sb.WriteString(fmt.Sprintf("%s:\n", CriterionCategoryOutputQuality))
+		fmt.Fprintf(&sb, "%s:\n", CriterionCategoryOutputQuality)
 		for i, crit := range qualityCriteria {
-			sb.WriteString(fmt.Sprintf("%d. %s: %s\n", startNum+i, crit.Name, crit.Description))
+			fmt.Fprintf(&sb, "%d. %s: %s\n", startNum+i, crit.Name, crit.Description)
 		}
 		sb.WriteString("\n")
 
@@ -936,9 +936,9 @@ func (pb *PromptBuilder) BuildGeneratorGuidance(criterionIDs []CriterionID) (str
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("%d. %s: %s\n", outputQualityNum, crit.Name, crit.Description))
+		fmt.Fprintf(&sb, "%d. %s: %s\n", outputQualityNum, crit.Name, crit.Description)
 		if crit.Examples != "" {
-			sb.WriteString(fmt.Sprintf("%s\n\n", crit.Examples))
+			fmt.Fprintf(&sb, "%s\n\n", crit.Examples)
 		}
 		outputQualityNum++
 	}

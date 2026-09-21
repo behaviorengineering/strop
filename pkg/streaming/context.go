@@ -30,7 +30,10 @@ func EventChannelFromContext(ctx context.Context) EventChannel {
 	if v == nil {
 		return nil
 	}
-	ch, _ := v.(EventChannel)
+	ch, ok := v.(EventChannel)
+	if !ok {
+		return nil
+	}
 	return ch
 }
 

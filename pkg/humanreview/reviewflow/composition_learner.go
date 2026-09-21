@@ -32,11 +32,11 @@ type ArtifactReviewPrompter interface {
 
 // BatchSaveLine is one row in the post-extract learning summary.
 type BatchSaveLine struct {
-	Kind    string // generator_example, content_rule, …
-	Job     string
-	Step    string
-	Detail  string // section, principle preview, move, …
-	Count   int    // section demos collapsed into one line when >1
+	Kind   string // generator_example, content_rule, …
+	Job    string
+	Step   string
+	Detail string // section, principle preview, move, …
+	Count  int    // section demos collapsed into one line when >1
 }
 
 // BatchSaveSummary describes what will be stored if the human confirms.
@@ -74,8 +74,8 @@ type DemoAccountabilityJudge interface {
 
 // CompositionLearnerDeps wires the shared after-approval learning orchestrator.
 type CompositionLearnerDeps struct {
-	Learning  humanreview.LearningService
-	Store     humanreview.LearningStore
+	Learning  humanreview.CompositionLearning
+	Store     humanreview.CompositionLearningStore
 	Pack      humanreview.CompositionLearningPack
 	MergeUI   MergeDecisionPrompter
 	BatchUI   BatchSavePrompter      // preferred: one summary confirm
@@ -152,7 +152,10 @@ func (l *CompositionLearner) AfterApproval(ctx context.Context, eval *humanrevie
 		case humanreview.MergeActionSkip:
 			continue
 		case humanreview.MergeActionUpdate:
-			key := mergeGroupKey(p.candidate)
+			key, keyErr := mergeGroupKey(p.candidate)
+			if keyErr != nil {
+				return keyErr
+			}
 			if _, done := updatedGroups[key]; done {
 				continue
 			}
@@ -172,7 +175,10 @@ func (l *CompositionLearner) AfterApproval(ctx context.Context, eval *humanrevie
 		return l.runAccountability(ctx, eval)
 	}
 
-	summary := buildBatchSummary(creates)
+	summary, summaryErr := buildBatchSummary(creates)
+	if summaryErr != nil {
+		return summaryErr
+	}
 	save, saveErr := l.confirmBatchSave(ctx, summary)
 	if saveErr != nil {
 		l.logWarnErr(saveErr, "Batch save prompt failed; leaving candidates unsaved")
@@ -197,7 +203,10 @@ func (l *CompositionLearner) planActions(
 	ctx context.Context,
 	candidates []humanreview.LearningCandidate,
 ) ([]plannedAction, error) {
-	groups := groupCandidatesForMerge(candidates)
+	groups, err := groupCandidatesForMerge(candidates)
+	if err != nil {
+		return nil, err
+	}
 	groupAction := make(map[string]plannedAction, len(groups))
 	for key, group := range groups {
 		rep := group[0]
@@ -212,7 +221,10 @@ func (l *CompositionLearner) planActions(
 
 	out := make([]plannedAction, 0, len(candidates))
 	for _, candidate := range candidates {
-		key := mergeGroupKey(candidate)
+		key, keyErr := mergeGroupKey(candidate)
+		if keyErr != nil {
+			return nil, keyErr
+		}
 		decided := groupAction[key]
 		out = append(out, plannedAction{
 			candidate:   candidate,
@@ -240,8 +252,14 @@ func (l *CompositionLearner) resolveMerge(
 	ctx context.Context,
 	candidate humanreview.LearningCandidate,
 ) (humanreview.MergeAction, *humanreview.LearningArtifact, error) {
-	jobStr, _ := candidate.Content["job"].(string)
-	stepStr, _ := candidate.Content["step"].(string)
+	jobStr, err := humanreview.StringField(candidate.Content, "job")
+	if err != nil {
+		return humanreview.MergeActionSkip, nil, err
+	}
+	stepStr, err := humanreview.StringField(candidate.Content, "step")
+	if err != nil {
+		return humanreview.MergeActionSkip, nil, err
+	}
 	if jobStr == "" || stepStr == "" {
 		return humanreview.MergeActionCreate, nil, nil
 	}
@@ -293,8 +311,14 @@ func (l *CompositionLearner) mergeIntoExisting(
 	if target == nil {
 		return fmt.Errorf("merge target is nil")
 	}
-	jobStr, _ := candidate.Content["job"].(string)
-	stepStr, _ := candidate.Content["step"].(string)
+	jobStr, err := humanreview.StringField(candidate.Content, "job")
+	if err != nil {
+		return err
+	}
+	stepStr, err := humanreview.StringField(candidate.Content, "step")
+	if err != nil {
+		return err
+	}
 	job := humanreview.Job(jobStr)
 	step := humanreview.Step(stepStr)
 	evalID := eval.ID
@@ -308,7 +332,9 @@ func (l *CompositionLearner) mergeIntoExisting(
 		Step:            &step,
 		UpdatedAt:       time.Now(),
 	}
-	if contextVal, ok := candidate.Content["context"].(map[string]interface{}); ok {
+	if contextVal, err := humanreview.ObjectField(candidate.Content, "context"); err != nil {
+		return err
+	} else if contextVal != nil {
 		updated.Context = contextVal
 	}
 	return l.deps.Learning.MergeIntoExisting(ctx, target.ID, updated)
@@ -319,8 +345,14 @@ func (l *CompositionLearner) createAndApprove(
 	eval *humanreview.HumanEvaluation,
 	candidate humanreview.LearningCandidate,
 ) error {
-	jobStr, _ := candidate.Content["job"].(string)
-	stepStr, _ := candidate.Content["step"].(string)
+	jobStr, err := humanreview.StringField(candidate.Content, "job")
+	if err != nil {
+		return err
+	}
+	stepStr, err := humanreview.StringField(candidate.Content, "step")
+	if err != nil {
+		return err
+	}
 	job := humanreview.Job(jobStr)
 	step := humanreview.Step(stepStr)
 	existing, err := l.deps.Store.ListByEvaluationJobStepAndType(ctx, eval.ID, job, step, candidate.Type)
@@ -331,8 +363,9 @@ func (l *CompositionLearner) createAndApprove(
 		return nil
 	}
 	var contextMap map[string]interface{}
-	if contextVal, ok := candidate.Content["context"].(map[string]interface{}); ok {
-		contextMap = contextVal
+	contextMap, err = humanreview.ObjectField(candidate.Content, "context")
+	if err != nil {
+		return err
 	}
 	evalID := eval.ID
 	now := time.Now()
@@ -452,26 +485,35 @@ func (l *CompositionLearner) logWarnErr(err error, msg string) {
 var _ Learner = (*CompositionLearner)(nil)
 
 // mergeGroupKey collapses per-section demos that share the same learning identity into one merge prompt.
-func mergeGroupKey(candidate humanreview.LearningCandidate) string {
-	job, _ := candidate.Content["job"].(string)
-	step, _ := candidate.Content["step"].(string)
+func mergeGroupKey(candidate humanreview.LearningCandidate) (string, error) {
+	job, err := humanreview.StringField(candidate.Content, "job")
+	if err != nil {
+		return "", err
+	}
+	step, err := humanreview.StringField(candidate.Content, "step")
+	if err != nil {
+		return "", err
+	}
 	if candidate.Type == humanreview.ArtifactTypeGeneratorExample {
 		snap := humanreview.SnapshotFromContent(candidate.Content)
-		return fmt.Sprintf("%s|%s|%s|move=%s", candidate.Type, strings.TrimSpace(job), strings.TrimSpace(step), snap.DistinctiveMove)
+		return fmt.Sprintf("%s|%s|%s|move=%s", candidate.Type, job, step, snap.DistinctiveMove), nil
 	}
 	return humanreview.CandidateIdentityKey(candidate.Type, candidate.Content)
 }
 
-func groupCandidatesForMerge(candidates []humanreview.LearningCandidate) map[string][]humanreview.LearningCandidate {
+func groupCandidatesForMerge(candidates []humanreview.LearningCandidate) (map[string][]humanreview.LearningCandidate, error) {
 	out := make(map[string][]humanreview.LearningCandidate)
 	for _, c := range candidates {
-		key := mergeGroupKey(c)
+		key, err := mergeGroupKey(c)
+		if err != nil {
+			return nil, err
+		}
 		out[key] = append(out[key], c)
 	}
-	return out
+	return out, nil
 }
 
-func buildBatchSummary(creates []humanreview.LearningCandidate) BatchSaveSummary {
+func buildBatchSummary(creates []humanreview.LearningCandidate) (BatchSaveSummary, error) {
 	type agg struct {
 		line  BatchSaveLine
 		count int
@@ -479,12 +521,20 @@ func buildBatchSummary(creates []humanreview.LearningCandidate) BatchSaveSummary
 	byKey := make(map[string]*agg)
 	order := make([]string, 0)
 	for _, c := range creates {
-		job, _ := c.Content["job"].(string)
-		step, _ := c.Content["step"].(string)
-		detail := summaryDetail(c)
+		job, err := humanreview.StringField(c.Content, "job")
+		if err != nil {
+			return BatchSaveSummary{}, err
+		}
+		step, err := humanreview.StringField(c.Content, "step")
+		if err != nil {
+			return BatchSaveSummary{}, err
+		}
+		detail, err := summaryDetail(c)
+		if err != nil {
+			return BatchSaveSummary{}, err
+		}
 		key := fmt.Sprintf("%s|%s|%s|%s", c.Type, job, step, detail)
 		if c.Type == humanreview.ArtifactTypeGeneratorExample {
-			// Collapse sections into one summary line keyed by move/job.
 			snap := humanreview.SnapshotFromContent(c.Content)
 			key = fmt.Sprintf("%s|%s|%s|move=%s", c.Type, job, step, snap.DistinctiveMove)
 			detail = snap.DistinctiveMove
@@ -500,8 +550,8 @@ func buildBatchSummary(creates []humanreview.LearningCandidate) BatchSaveSummary
 		byKey[key] = &agg{
 			line: BatchSaveLine{
 				Kind:   c.Type,
-				Job:    strings.TrimSpace(job),
-				Step:   strings.TrimSpace(step),
+				Job:    job,
+				Step:   step,
 				Detail: detail,
 				Count:  1,
 			},
@@ -513,31 +563,42 @@ func buildBatchSummary(creates []humanreview.LearningCandidate) BatchSaveSummary
 	for _, key := range order {
 		lines = append(lines, byKey[key].line)
 	}
-	return BatchSaveSummary{Lines: lines, Total: len(creates)}
+	return BatchSaveSummary{Lines: lines, Total: len(creates)}, nil
 }
 
-func summaryDetail(c humanreview.LearningCandidate) string {
+func summaryDetail(c humanreview.LearningCandidate) (string, error) {
 	switch c.Type {
 	case humanreview.ArtifactTypeContentRule:
-		principle, _ := c.Content["principle"].(string)
-		if strings.TrimSpace(principle) == "" {
-			principle, _ = c.Content["rule"].(string)
+		principle, err := humanreview.StringField(c.Content, "principle")
+		if err != nil {
+			return "", err
 		}
-		p := strings.TrimSpace(principle)
-		if len(p) > 72 {
-			return p[:69] + "..."
-		}
-		return p
-	case humanreview.ArtifactTypeGeneratorExample:
-		if ctx, ok := c.Content["context"].(map[string]interface{}); ok {
-			if section, _ := ctx["section_id"].(string); strings.TrimSpace(section) != "" {
-				return "section=" + strings.TrimSpace(section)
+		if principle == "" {
+			principle, err = humanreview.StringField(c.Content, "rule")
+			if err != nil {
+				return "", err
 			}
 		}
+		if len(principle) > 72 {
+			return principle[:69] + "...", nil
+		}
+		return principle, nil
+	case humanreview.ArtifactTypeGeneratorExample:
+		ctx, err := humanreview.ObjectField(c.Content, "context")
+		if err != nil {
+			return "", err
+		}
+		section, err := humanreview.StringField(ctx, "section_id")
+		if err != nil {
+			return "", err
+		}
+		if section != "" {
+			return "section=" + section, nil
+		}
 		snap := humanreview.SnapshotFromContent(c.Content)
-		return snap.DistinctiveMove
+		return snap.DistinctiveMove, nil
 	default:
-		return FormatCandidatePreview(c.Content)
+		return FormatCandidatePreview(c.Content), nil
 	}
 }
 
@@ -548,11 +609,15 @@ func FormatCandidatePreview(content map[string]interface{}) string {
 	}
 	snap := humanreview.SnapshotFromContent(content)
 	parts := make([]string, 0, 4)
-	if job, ok := content["job"].(string); ok && strings.TrimSpace(job) != "" {
-		parts = append(parts, "job="+strings.TrimSpace(job))
+	if job, err := humanreview.StringField(content, "job"); err != nil {
+		return ""
+	} else if job != "" {
+		parts = append(parts, "job="+job)
 	}
-	if step, ok := content["step"].(string); ok && strings.TrimSpace(step) != "" {
-		parts = append(parts, "step="+strings.TrimSpace(step))
+	if step, err := humanreview.StringField(content, "step"); err != nil {
+		return ""
+	} else if step != "" {
+		parts = append(parts, "step="+step)
 	}
 	if snap.DistinctiveMove != "" {
 		parts = append(parts, "move="+snap.DistinctiveMove)
@@ -560,21 +625,33 @@ func FormatCandidatePreview(content map[string]interface{}) string {
 	if snap.ObjectiveSummary != "" {
 		parts = append(parts, "objective="+snap.ObjectiveSummary)
 	}
-	principle, _ := content["principle"].(string)
-	if strings.TrimSpace(principle) == "" {
-		principle, _ = content["rule"].(string)
+	principle, err := humanreview.StringField(content, "principle")
+	if err != nil {
+		return ""
 	}
-	if strings.TrimSpace(principle) != "" {
+	if principle == "" {
+		principle, err = humanreview.StringField(content, "rule")
+		if err != nil {
+			return ""
+		}
+	}
+	if principle != "" {
 		p := strings.TrimSpace(principle)
 		if len(p) > 80 {
 			p = p[:77] + "..."
 		}
 		parts = append(parts, "principle="+p)
 	}
-	if ctx, ok := content["context"].(map[string]interface{}); ok {
-		if section, _ := ctx["section_id"].(string); strings.TrimSpace(section) != "" {
-			parts = append(parts, "section="+strings.TrimSpace(section))
-		}
+	ctx, err := humanreview.ObjectField(content, "context")
+	if err != nil {
+		return ""
+	}
+	section, err := humanreview.StringField(ctx, "section_id")
+	if err != nil {
+		return ""
+	}
+	if section != "" {
+		parts = append(parts, "section="+section)
 	}
 	return strings.Join(parts, " | ")
 }

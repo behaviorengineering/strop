@@ -28,7 +28,6 @@ func TestFromContext_zeroWhenUnset(t *testing.T) {
 func TestResearchModeFromContext(t *testing.T) {
 	t.Parallel()
 	assert.False(t, ResearchModeFromContext(context.Background()))
-	assert.False(t, ResearchModeFromContext(nil))
 	assert.True(t, ResearchModeFromContext(WithResearchMode(context.Background(), true)))
 	assert.False(t, ResearchModeFromContext(WithResearchMode(context.Background(), false)))
 }

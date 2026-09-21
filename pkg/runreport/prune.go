@@ -49,16 +49,25 @@ func trimEntityReports(root, entityID string, keep int) error {
 	if len(matches) <= keep {
 		return nil
 	}
-	sort.Slice(matches, func(i, j int) bool {
-		ii, _ := os.Stat(matches[i])
-		jj, _ := os.Stat(matches[j])
-		if ii == nil || jj == nil {
-			return matches[i] > matches[j]
+	type stamped struct {
+		path string
+		mod  time.Time
+	}
+	files := make([]stamped, 0, len(matches))
+	for _, path := range matches {
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			return statErr
 		}
-		return ii.ModTime().After(jj.ModTime())
+		files = append(files, stamped{path: path, mod: info.ModTime()})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].mod.After(files[j].mod)
 	})
-	for _, path := range matches[keep:] {
-		_ = os.Remove(path)
+	for _, file := range files[keep:] {
+		if rmErr := os.Remove(file.path); rmErr != nil {
+			return rmErr
+		}
 	}
 	return nil
 }

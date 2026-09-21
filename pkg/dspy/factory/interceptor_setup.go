@@ -52,32 +52,35 @@ type InterceptorSetup struct {
 	afterParse                   stropso.AfterParseHook
 }
 
-// NewInterceptorSetup creates a new interceptor setup helper.
-func NewInterceptorSetup(
-	openInferenceEnabled bool,
-	openInferenceServiceName string,
-	retryConfig *interceptors.RetryConfig,
-	moduleTimeout time.Duration,
-	createOpenInferenceInterceptor func(enabled bool, serviceName string, logger stroplog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor,
-	logger stroplog.Logger,
-	providerLookup func(modelID string) string,
-	modelIDByModuleName func(moduleName string) string,
-	onRegisterModuleModel func(moduleName, modelID string),
-	inputProcessorFactory func(provider stropdspy.ProviderConfig) stropvalidation.InputProcessor,
-	runReports runreport.Config,
-) *InterceptorSetup {
+// InterceptorSetupConfig is the dependency bundle for NewInterceptorSetup.
+type InterceptorSetupConfig struct {
+	OpenInferenceEnabled           bool
+	OpenInferenceServiceName       string
+	RetryConfig                    *interceptors.RetryConfig
+	ModuleTimeout                  time.Duration
+	CreateOpenInferenceInterceptor func(enabled bool, serviceName string, logger stroplog.Logger, providerLookup func(modelID string) string, modelIDByModuleName func(moduleName string) string) core.ModuleInterceptor
+	Logger                         stroplog.Logger
+	ProviderLookup                 func(modelID string) string
+	ModelIDByModuleName            func(moduleName string) string
+	OnRegisterModuleModel          func(moduleName, modelID string)
+	InputProcessorFactory          func(provider stropdspy.ProviderConfig) stropvalidation.InputProcessor
+	RunReports                     runreport.Config
+}
+
+// NewInterceptorSetup creates a new interceptor setup helper from cfg.
+func NewInterceptorSetup(cfg InterceptorSetupConfig) *InterceptorSetup {
 	return &InterceptorSetup{
-		openInferenceEnabled:           openInferenceEnabled,
-		openInferenceServiceName:       openInferenceServiceName,
-		retryConfig:                    retryConfig,
-		moduleTimeout:                  moduleTimeout,
-		createOpenInferenceInterceptor: createOpenInferenceInterceptor,
-		logger:                         logger,
-		providerLookup:                 providerLookup,
-		modelIDByModuleName:            modelIDByModuleName,
-		onRegisterModuleModel:          onRegisterModuleModel,
-		runReports:                     runReports.Defaults(),
-		inputProcessorFactory:          inputProcessorFactory,
+		openInferenceEnabled:           cfg.OpenInferenceEnabled,
+		openInferenceServiceName:       cfg.OpenInferenceServiceName,
+		retryConfig:                    cfg.RetryConfig,
+		moduleTimeout:                  cfg.ModuleTimeout,
+		createOpenInferenceInterceptor: cfg.CreateOpenInferenceInterceptor,
+		logger:                         cfg.Logger,
+		providerLookup:                 cfg.ProviderLookup,
+		modelIDByModuleName:            cfg.ModelIDByModuleName,
+		onRegisterModuleModel:          cfg.OnRegisterModuleModel,
+		runReports:                     cfg.RunReports.Defaults(),
+		inputProcessorFactory:          cfg.InputProcessorFactory,
 		outputValidators:               make(map[string]stropvalidation.OutputValidator),
 		requiredInputs:                 make(map[string][]string),
 	}
@@ -217,10 +220,8 @@ func (s *InterceptorSetup) EnableStructuredOutput(module core.InterceptableModul
 		"format":              parser.FormatName(),
 	})
 
-	currentInterceptors := module.GetInterceptors()
-
 	s.enablePredictRawXMLPassthrough(module, predict)
-	currentInterceptors = module.GetInterceptors()
+	currentInterceptors := module.GetInterceptors()
 
 	s.addValidationInterceptor(module, &currentInterceptors)
 

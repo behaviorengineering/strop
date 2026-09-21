@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/behaviorengineering/strop/pkg/evaluation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/behaviorengineering/strop/pkg/evaluation"
 )
 
 // Test role types for different pipelines.

@@ -8,4 +8,6 @@
 //
 //	<root>/plans/<planID>/plan.json
 //	<root>/plans/<planID>/steps/<stepID>.json
+//
+// The host supplies the root directory.
 package stepplan

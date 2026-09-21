@@ -43,9 +43,8 @@ type Session interface {
 	ApprovePendingContent(ctx context.Context, eval *humanreview.HumanEvaluation) error
 }
 
-// Learner runs after content approval. Nil on Ports means skip (today's behavior).
-// Implementations must fail open from the completion handler's point of view:
-// completion never fails because learning failed.
+// Learner runs after content approval. Nil on Ports means skip.
+// Learning failures must not fail completion. Report them through Ports.OnLearnError.
 type Learner interface {
 	AfterApproval(ctx context.Context, eval *humanreview.HumanEvaluation) error
 }
@@ -60,6 +59,8 @@ type Ports struct {
 	PipelineType humanreview.PipelineType
 	Learner      Learner
 	Packs        *humanreview.LearningPackRegistry
+	// OnLearnError receives AfterApproval failures without failing the completed approval.
+	OnLearnError func(error)
 }
 
 // RunState is mutable engine context shared by default handlers.
