@@ -840,6 +840,7 @@ func (pb *PromptBuilder) buildForbiddenPatternsReference(criteria []CriterionDes
 	hasInsiderPerspective := false
 	hasAntiAIFeel := false
 	hasNoAphorismStack := false
+	hasVoiceFidelity := false
 
 	for _, crit := range criteria {
 		switch crit.ID {
@@ -855,6 +856,8 @@ func (pb *PromptBuilder) buildForbiddenPatternsReference(criteria []CriterionDes
 			hasAntiAIFeel = true
 		case CriterionIDNoAphorismStack:
 			hasNoAphorismStack = true
+		case CriterionIDVoiceFidelity:
+			hasVoiceFidelity = true
 		}
 	}
 
@@ -895,6 +898,12 @@ func (pb *PromptBuilder) buildForbiddenPatternsReference(criteria []CriterionDes
 		sb.WriteString("Aphorism Stacks (No Aphorism Stack):\n")
 		sb.WriteString(`❌ Parallel Loud/Quiet couplets, semicolon aphorisms ("Stress drains; purpose concentrates."), metaphor restacks that only relabel the prior claim` + "\n")
 		sb.WriteString("✅ Next sentence adds a scene, fact, or mechanism\n\n")
+	}
+
+	if hasVoiceFidelity {
+		sb.WriteString("Voice Fidelity:\n")
+		sb.WriteString("❌ Staccato runs of short sentences with the same length; phrases listed on the supplied voice profile; paragraphs that never use a required verb class\n")
+		sb.WriteString("✅ Varied sentence length, profile bans absent, a mechanism verb when the profile lists one\n\n")
 	}
 
 	if hasInsiderPerspective {
