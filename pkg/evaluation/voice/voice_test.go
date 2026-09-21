@@ -33,11 +33,23 @@ func TestPromptsMentionProfile(t *testing.T) {
 	}
 	fa := FeedbackAnalysisPrompt(p)
 	require.Contains(t, fa, "voice_fidelity")
+	require.Contains(t, fa, "voice_profile")
 	require.Contains(t, fa, "Look,")
 	require.Contains(t, fa, "collapse")
 	require.Contains(t, fa, "structural diagnosis")
 	sg := ScoreGenerationPrompt(p)
 	require.Contains(t, sg, "voice_fidelity")
+}
+
+func TestDynamicPromptStaysNeutralWithoutProfile(t *testing.T) {
+	t.Parallel()
+	fa := DynamicFeedbackAnalysisPrompt()
+	require.Contains(t, fa, "generator_input.voice_profile")
+	require.Contains(t, fa, "Do not invent bans")
+	require.NotContains(t, fa, "Look,")
+	empty := FeedbackAnalysisPrompt(Profile{})
+	require.Equal(t, fa, empty)
+	require.NotContains(t, empty, "caller profile")
 }
 
 func TestHeuristicAuditPassesVariedProse(t *testing.T) {

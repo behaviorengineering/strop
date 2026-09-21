@@ -7,9 +7,9 @@ import (
 )
 
 // AppendVoiceEvaluator adds the portable voice_fidelity chained role to config.
-// Polish jobs that modulate voice SHOULD call this after a neutral composition.
-// Prefer a cheap model via CreateChainedEvaluatorsFromConfig roleProviders.
-// An empty profile still registers the role and scores staccato runs.
+// The role prompt reads generator_input.voice_profile at evaluation time.
+// profile is a fallback only when that field is empty. Pass an empty profile
+// for jobs that stay voice-neutral unless the caller supplies voice_profile.
 func AppendVoiceEvaluator(config *ChainedEvaluatorConfig, profile voice.Profile) {
 	if config == nil {
 		return

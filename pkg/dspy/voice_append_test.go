@@ -20,6 +20,7 @@ func TestAppendVoiceEvaluatorRegistersRole(t *testing.T) {
 	profile := voice.Profile{BannedPatterns: []string{"Look,"}}
 	AppendVoiceEvaluator(cfg, profile)
 	require.Contains(t, cfg.RolePrompts, voice.EvaluatorKey)
+	require.Contains(t, cfg.RolePrompts[voice.EvaluatorKey].FeedbackAnalysisPrompt, "voice_profile")
 	require.Contains(t, cfg.RolePrompts[voice.EvaluatorKey].FeedbackAnalysisPrompt, "Look,")
 	require.Contains(t, cfg.CriterionIDs, criteria.CriterionIDVoiceFidelity)
 	require.Contains(t, cfg.CriterionIDs, criteria.CriterionIDCompleteness)
