@@ -133,6 +133,145 @@ func TestRunCompositionLoop_runPhaseError(t *testing.T) {
 	assert.Contains(t, err.Error(), "generate failed")
 }
 
+type mockCompensatingStrategy struct {
+	mockCompositionStrategy
+	budget       int
+	planCalls    int
+	applyCalls   int
+	passOnApply  int
+	collectErr   error
+	planErr      error
+	applyErr     error
+	lastEvidence *CompensationEvidence
+	lastPlan     *RepairPlan
+}
+
+func (m *mockCompensatingStrategy) CompensateAttempts(PhaseDef) int {
+	return m.budget
+}
+
+func (m *mockCompensatingStrategy) CollectEvidence(
+	_ context.Context,
+	phase PhaseDef,
+	feedback string,
+	failed map[string]string,
+) (*CompensationEvidence, error) {
+	if m.collectErr != nil {
+		return nil, m.collectErr
+	}
+	m.lastEvidence = &CompensationEvidence{
+		PhaseID:      string(phase.ID),
+		Feedback:     feedback,
+		FailedOutput: failed,
+	}
+	return m.lastEvidence, nil
+}
+
+func (m *mockCompensatingStrategy) PlanRepair(
+	_ context.Context,
+	evidence *CompensationEvidence,
+	_ streaming.EventChannel,
+) (*RepairPlan, error) {
+	m.planCalls++
+	if m.planErr != nil {
+		return nil, m.planErr
+	}
+	m.lastPlan = &RepairPlan{Summary: "repair " + evidence.PhaseID, Steps: []string{"rewrite owned fields"}, Body: evidence.Feedback}
+	return m.lastPlan, nil
+}
+
+func (m *mockCompensatingStrategy) ApplyAndGate(
+	_ context.Context,
+	phase PhaseDef,
+	_ *CompensationEvidence,
+	_ *RepairPlan,
+	_ streaming.EventChannel,
+) (*PhaseResult, error) {
+	m.applyCalls++
+	if m.applyErr != nil {
+		return nil, m.applyErr
+	}
+	passOn := m.passOnApply
+	if passOn <= 0 {
+		passOn = 1
+	}
+	return &PhaseResult{
+		Fields:   map[string]string{"phase": string(phase.ID)},
+		Score:    8.5,
+		Feedback: "compensate feedback",
+		Passed:   m.applyCalls >= passOn,
+	}, nil
+}
+
+func TestRunCompositionLoop_compensatorNotCalledOnPass(t *testing.T) {
+	strategy := &mockCompensatingStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases:    []PhaseDef{{ID: "fork", MaxAttempts: 3}},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"fork": 1},
+		},
+		budget: 2,
+	}
+	out, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	assert.Equal(t, 0, strategy.planCalls)
+	assert.Equal(t, 0, strategy.applyCalls)
+}
+
+func TestRunCompositionLoop_compensatePassAfterExhaust(t *testing.T) {
+	strategy := &mockCompensatingStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases:    []PhaseDef{{ID: "fork", MaxAttempts: 2}},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"fork": 99},
+		},
+		budget:      2,
+		passOnApply: 1,
+	}
+	out, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	assert.Equal(t, 2, strategy.attempts["fork"])
+	assert.Equal(t, 1, strategy.planCalls)
+	assert.Equal(t, 1, strategy.applyCalls)
+	require.NotNil(t, strategy.lastEvidence)
+	assert.Len(t, strategy.lastEvidence.AttemptHistory, 2)
+}
+
+func TestRunCompositionLoop_compensateExhausts(t *testing.T) {
+	strategy := &mockCompensatingStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases:    []PhaseDef{{ID: "fork", MaxAttempts: 1}},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"fork": 99},
+		},
+		budget:      2,
+		passOnApply: 99,
+	}
+	out, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.Error(t, err)
+	assert.Nil(t, out)
+	assert.Contains(t, err.Error(), "compensate attempts")
+	assert.Equal(t, 2, strategy.applyCalls)
+}
+
+func TestRunCompositionLoop_zeroCompensateBudgetHardFails(t *testing.T) {
+	strategy := &mockCompensatingStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases:    []PhaseDef{{ID: "fork", MaxAttempts: 1}},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"fork": 99},
+		},
+		budget: 0,
+	}
+	out, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.Error(t, err)
+	assert.Nil(t, out)
+	assert.NotContains(t, err.Error(), "compensate")
+	assert.Equal(t, 0, strategy.planCalls)
+}
+
 func TestRunCompositionLoop_resultError(t *testing.T) {
 	strategy := &mockCompositionStrategy{
 		phases: []PhaseDef{

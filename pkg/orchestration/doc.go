@@ -8,6 +8,7 @@
 //   - RunPerItemRefinementLoop*: per-item generate → evaluate → refine, then one save.
 //   - RunCompositionLoop: ordered phases with per-phase generate → gate → lock (vertical document assembly).
 //   - RunStepPlan: ordered stepplan.Plan with filesystem checkpoints, per-step budgets, and resume.
+//     Optional PhaseCompensator runs diagnose → plan → apply after a phase exhausts MaxAttempts.
 //
 // Strategies:
 //   - RefinementStrategy — entity-level version refine.

@@ -61,8 +61,9 @@ type CompositionStrategy interface {
 }
 
 // RunCompositionLoop runs each phase in order until it passes or exhausts MaxAttempts.
-// On full success it returns strategy.Result(). A failed phase returns an error without calling Result;
-// upstream locked phases are left intact on the strategy.
+// If the strategy implements PhaseCompensator and CompensateAttempts is positive, an exhausted
+// phase runs diagnose → plan → apply before hard-fail. On full success it returns strategy.Result().
+// A failed phase returns an error without calling Result; upstream locked phases stay intact.
 func RunCompositionLoop(
 	ctx context.Context,
 	strategy CompositionStrategy,
@@ -83,6 +84,9 @@ func RunCompositionLoop(
 		}
 		feedback := ""
 		var lastFeedback string
+		var lastFailedFields map[string]string
+		var attemptHistory []CompensationAttempt
+		phasePassed := false
 
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			select {
@@ -110,6 +114,12 @@ func RunCompositionLoop(
 				))
 				return nil, err
 			}
+			attemptHistory = append(attemptHistory, CompensationAttempt{
+				Attempt:  attempt,
+				Score:    result.Score,
+				Feedback: truncateFeedback(result.Feedback, 400),
+				Passed:   result.Passed,
+			})
 			if result.Passed {
 				if c := runreport.CollectorFromContext(ctx); c != nil {
 					c.RecordPhase(string(phase.ID), attempt, true, result.Score, truncateFeedback(result.Feedback, 200))
@@ -119,21 +129,18 @@ func RunCompositionLoop(
 					phaseLabel(phase),
 					result.Score,
 				))
+				phasePassed = true
 				break
 			}
 
 			lastFeedback = result.Feedback
+			lastFailedFields = result.Fields
 			feedback = result.Feedback
 			if c := runreport.CollectorFromContext(ctx); c != nil {
 				c.RecordPhase(string(phase.ID), attempt, false, result.Score, truncateFeedback(result.Feedback, 200))
 			}
 			if attempt == maxAttempts {
-				return nil, fmt.Errorf(
-					"composition phase %s failed after %d attempts: %s",
-					phase.ID,
-					maxAttempts,
-					truncateFeedback(lastFeedback, 500),
-				)
+				break
 			}
 			retryMsg := fmt.Sprintf(
 				"Composition phase %s retrying (score %.1f)",
@@ -145,10 +152,143 @@ func RunCompositionLoop(
 			}
 			sendCompositionEvent(eventChan, retryMsg)
 		}
+
+		if phasePassed {
+			continue
+		}
+
+		if err := runPhaseCompensation(ctx, strategy, phase, lastFeedback, lastFailedFields, attemptHistory, eventChan); err != nil {
+			return nil, err
+		}
 	}
 
 	sendCompositionEvent(eventChan, "Composition completed for all phases")
 	return strategy.Result()
+}
+
+// runPhaseCompensation runs optional diagnose → plan → apply after normal retries exhaust.
+// Strategies that do not implement PhaseCompensator (or return 0 attempts) hard-fail as before.
+func runPhaseCompensation(
+	ctx context.Context,
+	strategy CompositionStrategy,
+	phase PhaseDef,
+	lastFeedback string,
+	lastFailedFields map[string]string,
+	attemptHistory []CompensationAttempt,
+	eventChan streaming.EventChannel,
+) error {
+	maxAttempts := phase.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+	hardFail := func(feedback string) error {
+		return fmt.Errorf(
+			"composition phase %s failed after %d attempts: %s",
+			phase.ID,
+			maxAttempts,
+			truncateFeedback(feedback, 500),
+		)
+	}
+
+	comp, ok := strategy.(PhaseCompensator)
+	if !ok {
+		return hardFail(lastFeedback)
+	}
+	compBudget := comp.CompensateAttempts(phase)
+	if compBudget <= 0 {
+		return hardFail(lastFeedback)
+	}
+
+	feedback := lastFeedback
+	failed := lastFailedFields
+	history := append([]CompensationAttempt(nil), attemptHistory...)
+
+	for attempt := 1; attempt <= compBudget; attempt++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		sendCompositionEvent(eventChan, fmt.Sprintf(
+			"Composition phase %s compensate plan (attempt %d/%d)",
+			phaseLabel(phase),
+			attempt,
+			compBudget,
+		))
+
+		evidence, err := comp.CollectEvidence(ctx, phase, feedback, failed)
+		if err != nil {
+			return fmt.Errorf("composition phase %s compensate collect: %w", phase.ID, err)
+		}
+		if evidence == nil {
+			evidence = &CompensationEvidence{PhaseID: string(phase.ID), Feedback: feedback, FailedOutput: failed}
+		}
+		if len(evidence.AttemptHistory) == 0 {
+			evidence.AttemptHistory = history
+		}
+		if evidence.PhaseID == "" {
+			evidence.PhaseID = string(phase.ID)
+		}
+
+		plan, err := comp.PlanRepair(ctx, evidence, eventChan)
+		if err != nil {
+			return fmt.Errorf("composition phase %s compensate plan: %w", phase.ID, err)
+		}
+
+		sendCompositionEvent(eventChan, fmt.Sprintf(
+			"Composition phase %s compensate apply (attempt %d/%d)",
+			phaseLabel(phase),
+			attempt,
+			compBudget,
+		))
+
+		result, err := comp.ApplyAndGate(ctx, phase, evidence, plan, eventChan)
+		if err != nil {
+			if c := runreport.CollectorFromContext(ctx); c != nil {
+				c.RecordPhase(string(phase.ID)+":compensate", attempt, false, 0, truncateFeedback(err.Error(), 200))
+			}
+			return fmt.Errorf("composition phase %s compensate apply: %w", phase.ID, err)
+		}
+		if result == nil {
+			return fmt.Errorf("composition phase %s compensate apply: empty result", phase.ID)
+		}
+		history = append(history, CompensationAttempt{
+			Attempt:  maxAttempts + attempt,
+			Score:    result.Score,
+			Feedback: truncateFeedback(result.Feedback, 400),
+			Passed:   result.Passed,
+		})
+		if result.Passed {
+			if c := runreport.CollectorFromContext(ctx); c != nil {
+				c.RecordPhase(string(phase.ID)+":compensate", attempt, true, result.Score, truncateFeedback(result.Feedback, 200))
+			}
+			sendCompositionEvent(eventChan, fmt.Sprintf(
+				"Composition phase %s compensate passed (score %.1f)",
+				phaseLabel(phase),
+				result.Score,
+			))
+			return nil
+		}
+		if c := runreport.CollectorFromContext(ctx); c != nil {
+			c.RecordPhase(string(phase.ID)+":compensate", attempt, false, result.Score, truncateFeedback(result.Feedback, 200))
+		}
+		feedback = result.Feedback
+		failed = result.Fields
+		sendCompositionEvent(eventChan, fmt.Sprintf(
+			"Composition phase %s compensate failed (score %.1f)",
+			phaseLabel(phase),
+			result.Score,
+		))
+	}
+
+	return fmt.Errorf(
+		"composition phase %s failed after %d attempts and %d compensate attempts: %s",
+		phase.ID,
+		maxAttempts,
+		compBudget,
+		truncateFeedback(feedback, 500),
+	)
 }
 
 func phaseLabel(phase PhaseDef) string {
