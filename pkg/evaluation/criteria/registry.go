@@ -37,6 +37,7 @@ const (
 	CriterionIDInsiderPerspective     CriterionID = "insider_perspective"
 	CriterionIDAntiAIFeel             CriterionID = "anti_ai_feel"
 	CriterionIDNoAphorismStack        CriterionID = "no_aphorism_stack"
+	CriterionIDVoiceFidelity          CriterionID = "voice_fidelity"
 	CriterionIDNoRedundantExplanation CriterionID = "no_redundant_explanation"
 
 	// Output Quality Criteria (used in human approval/rejection stage).
@@ -377,6 +378,21 @@ BAD (score 0): "Loud shows up on the checklist. Quiet looks like personality."
 BAD (score 0): "Stress drains; purpose concentrates."
 BAD (score 0): Consecutive metaphor punches that only remix the prior claim (map/page, storm/filter, bill-to-pay) without a new scene or mechanism.
 Autopsy: fail punchy antithesis and metaphor remixes that sound clever but add no new evidence. Separate from contrastive negation ("isn't X, but Y") and from anti_ai_feel (colloquial framing devices).`,
+		MaxPoints: 2.0,
+		Category:  CriterionCategoryOutputQuality,
+	})
+
+	registry.Register(CriterionDescription{
+		ID:          CriterionIDVoiceFidelity,
+		Name:        "Voice Fidelity",
+		Description: `Reader-facing prose matches the supplied voice profile: cadence, banned phrases, and mechanism verbs. The profile is caller-supplied. This criterion does not name a product or a persona.`,
+		Scoring: `2 points: Cadence varies, listed banned phrases are absent, and each paragraph that should carry a mechanism uses a listed verb class when the profile requires one.
+1 point: One mild miss (a single banned phrase in a quote, or one short paragraph without a listed verb) that does not flatten the piece.
+0 points: A staccato run past the profile limit, a banned phrase used as the writer's voice, or repeated paragraphs with none of the required verb classes.`,
+		Examples: `GOOD: Uneven sentence lengths and a concrete verb in each paragraph. No conversational crutch from the profile list.
+BAD (score 0): Three short sentences in a row with nearly the same word count.
+BAD (score 0): A banned phrase from the profile appears as the writer's own wording.
+The phrase list and verb list come from the voice profile passed by the caller. Do not invent a house style when the profile is empty: then score only staccato runs.`,
 		MaxPoints: 2.0,
 		Category:  CriterionCategoryOutputQuality,
 	})
