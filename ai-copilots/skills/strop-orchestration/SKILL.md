@@ -49,6 +49,8 @@ description: >-
 
 **Healing:** If score decreases, the loop MUST attempt self-healing before stopping for regression (`maxHealingAttempts >= 1`).
 
+**Phase compensation:** Optional `PhaseCompensator` on a `CompositionStrategy`. After `MaxAttempts` fail, the loop collects evidence, runs plan inference, then apply+re-gate. Return `CompensateAttempts == 0` to skip. Do not reuse `HealingStrategy` for phase exhaust.
+
 **Early exit:** Successful early exit MUST return a concrete selected ID — never `uuid.Nil`. Fallback order: pending → approved → any existing record.
 
 ---

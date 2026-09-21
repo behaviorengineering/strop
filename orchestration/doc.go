@@ -7,6 +7,7 @@
 //   - RunRefinementLoop: generate → evaluate → check stop → save or recurse (with optional self-healing).
 //   - RunPerItemRefinementLoop*: per-item generate → evaluate → refine, then one save.
 //   - RunCompositionLoop: ordered phases with per-phase generate → gate → lock (vertical document assembly).
+//     Optional PhaseCompensator runs diagnose → plan → apply after a phase exhausts MaxAttempts.
 //
 // Strategies:
 //   - RefinementStrategy — entity-level version refine.

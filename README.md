@@ -124,6 +124,8 @@ Multi-field phases: `PhaseWalkOwnedFields` maps each `PhaseID` to the field keys
 
 App supplies `PhaseWalkRunner`, phase defs, `OwnedFields`, optional `Seed`/`Version`, and optional `Finalize`.
 
+**Phase compensation (optional):** implement `PhaseCompensator` on the composition strategy. When a phase exhausts `MaxAttempts`, `RunCompositionLoop` calls `CollectEvidence` → `PlanRepair` → `ApplyAndGate` up to `CompensateAttempts`. Return 0 to keep the hard-fail. Hosts supply the plan inference (RLM or structured predict) and the apply rewrite; strop does not encode product prompts. This is not refinement `HealingStrategy` (that path is score-decrease on a version, not phase exhaust).
+
 **Use when** a phase writes several fields together, pass logic is phase-specific, or the final artifact is not a flat string map (e.g. sayings post skim → warmth → depth → teaser in `internal/pipelines/sayings/services/post/composition.go`).
 
 ### Field-walk vs phase-walk
