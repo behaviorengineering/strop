@@ -2,6 +2,7 @@ package reviewflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -140,7 +141,7 @@ func defaultHandleRegeneration(ports Ports, run *RunState) Handler {
 		res, err := ports.Generator.Regenerate(ctx, run.RootID, run.Job, opts)
 		if err != nil {
 			if setErr := ports.Gate.SetStatus(ctx, run.EvaluationID, humanreview.StatusRejected); setErr != nil {
-				return StateExit, fmt.Errorf("regeneration failed (%v) and persisting rejected status also failed: %w", err, setErr)
+				return StateExit, fmt.Errorf("regeneration failed and persisting rejected status also failed: %w", errors.Join(err, setErr))
 			}
 			return StateRejection, nil
 		}

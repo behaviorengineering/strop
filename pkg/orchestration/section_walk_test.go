@@ -99,7 +99,7 @@ func TestSectionWalkStrategy_emptyThenAggregate(t *testing.T) {
 		"going_deeper": "g",
 	}
 	runner := &fakeSectionRunner{t: t, failFirst: map[string]bool{"description": true}}
-	strat := NewSectionWalkStrategy(SectionWalkConfig[map[string]string]{
+	strategy := NewSectionWalkStrategy(SectionWalkConfig[map[string]string]{
 		Sections:        testSectionDefinition(),
 		Seed:            seed,
 		Version:         1,
@@ -108,7 +108,7 @@ func TestSectionWalkStrategy_emptyThenAggregate(t *testing.T) {
 		Codec:           stringMapCodec(),
 		EmptyResultErr:  fmt.Errorf("empty"),
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -140,7 +140,7 @@ func TestSectionWalkStrategy_sourceTextFunc(t *testing.T) {
 	codec.SourceText = func(_ map[string]string, sectionID string) string {
 		return en[sectionID]
 	}
-	strat := NewSectionWalkStrategy(SectionWalkConfig[map[string]string]{
+	strategy := NewSectionWalkStrategy(SectionWalkConfig[map[string]string]{
 		Sections:       testSectionDefinition(),
 		Seed:           seedES,
 		Version:        1,
@@ -148,7 +148,7 @@ func TestSectionWalkStrategy_sourceTextFunc(t *testing.T) {
 		Codec:          codec,
 		EmptyResultErr: fmt.Errorf("empty"),
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, runner.calls, 5)

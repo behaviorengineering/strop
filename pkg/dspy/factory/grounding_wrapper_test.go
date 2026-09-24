@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -53,11 +54,18 @@ func TestNewGroundingLLMWrapper_usesProviderTimeout(t *testing.T) {
 		"gemini-2.5-flash",
 		60*time.Second,
 		nil,
+		nil,
 	)
 	assert.Equal(t, 60*time.Second, wrapper.httpClient.Timeout)
 }
 
 func TestNewGroundingLLMWrapper_zeroTimeoutUsesAttemptDefault(t *testing.T) {
-	wrapper := NewGroundingLLMWrapper(nil, &stropdspy.GroundingConfig{}, "key", "https://example", "model", 0, nil)
+	wrapper := NewGroundingLLMWrapper(nil, &stropdspy.GroundingConfig{}, "key", "https://example", "model", 0, nil, nil)
 	assert.Equal(t, 60*time.Second, wrapper.httpClient.Timeout)
+}
+
+func TestNewGroundingLLMWrapper_reusesInjectedClient(t *testing.T) {
+	shared := &http.Client{Timeout: 12 * time.Second}
+	wrapper := NewGroundingLLMWrapper(nil, &stropdspy.GroundingConfig{}, "key", "https://example", "model", 60*time.Second, shared, nil)
+	assert.Same(t, shared, wrapper.httpClient)
 }

@@ -110,7 +110,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]Meta, error) {
 		}
 		meta, err := s.readMeta(filepath.Join(root, e.Name()))
 		if err != nil {
-			continue
+			return nil, wrap("List", fmt.Errorf("meta %s: %w", e.Name(), err))
 		}
 		if kind != "" && meta.Kind != kind {
 			continue
@@ -140,7 +140,7 @@ func (s *Store) AppendTurn(ctx context.Context, id string, turn Turn) (err error
 		return err
 	}
 	if meta.Status == StatusClosed {
-		return fmt.Errorf("agentsession: session %s is closed", id)
+		return &Error{Op: "AppendTurn", Msg: fmt.Sprintf("session %s is closed", id), err: ErrClosed}
 	}
 	if turn.At.IsZero() {
 		turn.At = time.Now().UTC()
@@ -149,14 +149,14 @@ func (s *Store) AppendTurn(ctx context.Context, id string, turn Turn) (err error
 	}
 	turn.Role = strings.TrimSpace(turn.Role)
 	if turn.Role == "" {
-		return fmt.Errorf("agentsession: turn role is required")
+		return invalid("AppendTurn", "turn role is required")
 	}
 	line, err := json.Marshal(turn)
 	if err != nil {
 		return fmt.Errorf("agentsession: marshal turn: %w", err)
 	}
 	path := filepath.Join(dir, FileTranscript)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("agentsession: open transcript: %w", err)
 	}
@@ -197,7 +197,7 @@ func (s *Store) ReadTurns(ctx context.Context, id string) ([]Turn, error) {
 		}
 		var t Turn
 		if err := json.Unmarshal([]byte(line), &t); err != nil {
-			return nil, fmt.Errorf("agentsession: parse transcript line: %w", err)
+			return nil, corrupt("ReadTurns", "parse transcript line", err)
 		}
 		out = append(out, t)
 	}
@@ -229,7 +229,7 @@ func (s *Store) SaveJSON(ctx context.Context, id, name string, v any) error {
 		return fmt.Errorf("agentsession: marshal %s: %w", base, err)
 	}
 	path := filepath.Join(dir, base)
-	if err := os.WriteFile(path, data, 0o640); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("agentsession: write %s: %w", base, err)
 	}
 	return s.touch(dir, meta)
@@ -340,7 +340,7 @@ func (s *Store) writeMeta(dir string, meta *Meta) error {
 		return fmt.Errorf("agentsession: marshal meta: %w", err)
 	}
 	path := filepath.Join(dir, FileMeta)
-	if err := os.WriteFile(path, data, 0o640); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("agentsession: write meta: %w", err)
 	}
 	return nil
@@ -354,7 +354,7 @@ func (s *Store) readMeta(dir string) (*Meta, error) {
 	}
 	var meta Meta
 	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, fmt.Errorf("agentsession: unmarshal meta: %w", err)
+		return nil, corrupt("readMeta", "unmarshal meta", err)
 	}
 	if meta.ID == "" {
 		meta.ID = filepath.Base(dir)

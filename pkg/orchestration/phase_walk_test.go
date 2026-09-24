@@ -81,12 +81,12 @@ func multiPhaseWalkOwned() PhaseWalkOwnedFields {
 func TestPhaseWalkStrategy_happyPath(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -102,12 +102,12 @@ func TestPhaseWalkStrategy_happyPath(t *testing.T) {
 func TestPhaseWalkStrategy_priorLockedFieldsExcludeLaterPhases(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
 	})
-	_, err := RunCompositionLoop(context.Background(), strat, nil)
+	_, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 
 	// body call: should have intro fields locked, but not close fields.
@@ -128,12 +128,12 @@ func TestPhaseWalkStrategy_priorLockedFieldsExcludeLaterPhases(t *testing.T) {
 func TestPhaseWalkStrategy_retryWiresPreviousFailedOutput(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t, failFirst: map[string]bool{"body": true}}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
 	})
-	_, err := RunCompositionLoop(context.Background(), strat, nil)
+	_, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 
 	// There should be two calls for "body": one fail then one pass.
@@ -153,12 +153,12 @@ func TestPhaseWalkStrategy_retryWiresPreviousFailedOutput(t *testing.T) {
 func TestPhaseWalkStrategy_passedFailedFieldsNotInDraft(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t, failFirst: map[string]bool{"body": true}}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 
 	st := result.OutputState.(*PhaseWalkState)
@@ -170,7 +170,7 @@ func TestPhaseWalkStrategy_passedFailedFieldsNotInDraft(t *testing.T) {
 func TestPhaseWalkStrategy_mergeOnFail_updatesDraftBeforeRetry(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t, failFirst: map[string]bool{"body": true}}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
@@ -181,24 +181,24 @@ func TestPhaseWalkStrategy_mergeOnFail_updatesDraftBeforeRetry(t *testing.T) {
 	introPhase := PhaseDef{ID: "intro", DisplayName: "intro", MaxAttempts: 2}
 	bodyPhase := PhaseDef{ID: "body", DisplayName: "body", MaxAttempts: 2}
 
-	_, err := strat.RunPhase(ctx, introPhase, "", nil)
+	_, err := strategy.RunPhase(ctx, introPhase, "", nil)
 	require.NoError(t, err)
 
-	_, err = strat.RunPhase(ctx, bodyPhase, "", nil)
+	_, err = strategy.RunPhase(ctx, bodyPhase, "", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "weak-body_main", strat.draft["body_main"])
-	assert.Equal(t, "weak-body_detail", strat.draft["body_detail"])
+	assert.Equal(t, "weak-body_main", strategy.draft["body_main"])
+	assert.Equal(t, "weak-body_detail", strategy.draft["body_detail"])
 
-	_, err = strat.RunPhase(ctx, bodyPhase, "retry-body", nil)
+	_, err = strategy.RunPhase(ctx, bodyPhase, "retry-body", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "out-body_main", strat.draft["body_main"])
-	assert.Equal(t, "out-body_detail", strat.draft["body_detail"])
+	assert.Equal(t, "out-body_main", strategy.draft["body_main"])
+	assert.Equal(t, "out-body_detail", strategy.draft["body_detail"])
 }
 
 func TestPhaseWalkStrategy_mergeOnFail_falseLeavesDraftUnchangedOnFail(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t, failFirst: map[string]bool{"body": true}}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
@@ -208,13 +208,13 @@ func TestPhaseWalkStrategy_mergeOnFail_falseLeavesDraftUnchangedOnFail(t *testin
 	introPhase := PhaseDef{ID: "intro", DisplayName: "intro", MaxAttempts: 2}
 	bodyPhase := PhaseDef{ID: "body", DisplayName: "body", MaxAttempts: 2}
 
-	_, err := strat.RunPhase(ctx, introPhase, "", nil)
+	_, err := strategy.RunPhase(ctx, introPhase, "", nil)
 	require.NoError(t, err)
 
-	_, err = strat.RunPhase(ctx, bodyPhase, "", nil)
+	_, err = strategy.RunPhase(ctx, bodyPhase, "", nil)
 	require.NoError(t, err)
-	_, hasMain := strat.draft["body_main"]
-	_, hasDetail := strat.draft["body_detail"]
+	_, hasMain := strategy.draft["body_main"]
+	_, hasDetail := strategy.draft["body_detail"]
 	assert.False(t, hasMain)
 	assert.False(t, hasDetail)
 }
@@ -223,7 +223,7 @@ func TestPhaseWalkStrategy_pluggableFinalize(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t}
 	finalizeCalled := false
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
@@ -245,7 +245,7 @@ func TestPhaseWalkStrategy_pluggableFinalize(t *testing.T) {
 			}, nil
 		},
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.True(t, finalizeCalled)
 	require.NotNil(t, result)
@@ -262,11 +262,11 @@ func TestPhaseWalkStrategy_noOwnedFieldsAcceptsAllReturned(t *testing.T) {
 	phases := []PhaseDef{
 		{ID: "alpha", MaxAttempts: 1},
 	}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases: phases,
 		Runner: runner,
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 }
@@ -274,13 +274,13 @@ func TestPhaseWalkStrategy_noOwnedFieldsAcceptsAllReturned(t *testing.T) {
 func TestPhaseWalkStrategy_seedPopulatesDraft(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t}
-	strat := NewPhaseWalkStrategy(PhaseWalkConfig{
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
 		Phases:      multiPhaseWalkDefs(),
 		OwnedFields: multiPhaseWalkOwned(),
 		Runner:      runner,
 		Seed:        map[string]string{"extra": "seeded"},
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	st := result.OutputState.(*PhaseWalkState)
 	assert.Equal(t, "seeded", st.Draft["extra"])

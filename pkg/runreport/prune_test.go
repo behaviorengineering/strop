@@ -16,10 +16,10 @@ func TestPrune_TrimsOldReportsAndKeepsLatest(t *testing.T) {
 
 	oldPath := filepath.Join(entityDir, "old.json")
 	newPath := filepath.Join(entityDir, "new.json")
-	if err := os.WriteFile(oldPath, []byte(`{}`), 0o640); err != nil {
+	if err := os.WriteFile(oldPath, []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(newPath, []byte(`{}`), 0o640); err != nil {
+	if err := os.WriteFile(newPath, []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	oldTime := time.Now().Add(-72 * time.Hour)

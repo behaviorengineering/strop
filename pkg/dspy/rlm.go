@@ -55,16 +55,10 @@ func RLMDefaults() RLMConfig {
 // CreateModule builds a dspy-go RLM from this config (same rhythm as GeneratorConfig.CreateModule).
 // LLM must be set on the config. Hosts then call RLMComplete with context and query.
 func (c RLMConfig) CreateModule() (*dspyrlm.RLM, error) {
-	return CreateRLMModule(c.LLM, c)
-}
-
-// CreateRLMModule builds a dspy-go RLM module from an already-resolved LLM.
-// Prefer RLMConfig.CreateModule after setting cfg.LLM, or factory.CreateRLM from ProviderConfig.
-func CreateRLMModule(llm core.LLM, cfg RLMConfig) (*dspyrlm.RLM, error) {
-	if llm == nil {
-		return nil, fmt.Errorf("CreateRLMModule: llm is required")
+	if c.LLM == nil {
+		return nil, fmt.Errorf("RLMConfig.CreateModule: LLM is required")
 	}
-	return dspyrlm.NewFromLLM(llm, rlmOptions(cfg)...), nil
+	return dspyrlm.NewFromLLM(c.LLM, rlmOptions(c)...), nil
 }
 
 // RLMComplete runs one RLM completion and returns the final answer text.
@@ -141,11 +135,11 @@ func recordRLMDump(traceDir string, entry rlmInputsDumpEntry) error {
 }
 
 func appendRLMInputsDump(traceDir string, entry rlmInputsDumpEntry) (err error) {
-	if mkErr := os.MkdirAll(traceDir, 0o755); mkErr != nil {
+	if mkErr := os.MkdirAll(traceDir, 0o750); mkErr != nil {
 		return mkErr
 	}
 	path := filepath.Join(traceDir, RLMInputsDumpFile)
-	f, openErr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, openErr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if openErr != nil {
 		return openErr
 	}

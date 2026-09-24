@@ -622,7 +622,7 @@ func arrayChildTag(parentTag string) string {
 // exactMapKeysMarker prefixes an explicit comma-separated key list in a field description.
 const exactMapKeysMarker = "Exact map keys:"
 
-// criterionIDMappingArrow matches score-prompt lines like: - Name → "instruction_compliance"
+// criterionIDMappingArrow matches score-prompt lines like: - Name → "instruction_compliance".
 var criterionIDMappingArrow = regexp.MustCompile(`→\s*"([a-z][a-z0-9_]*)"`)
 
 // extractExactMapKeys finds fixed map child tag names from the field description and/or
@@ -1231,11 +1231,12 @@ func (p *XMLParser) parseXML(responseText string, signature core.Signature, conf
 		case xml.CharData:
 			// Direct text under a newline-joined array parent (no child wrapper): capture plain lines when
 			// the model omits repeated item tags; array mode normally ignores CharData until a child opens.
-			if currentArrayField != "" && sigInfo.NewlineJoinedArrayFields[currentArrayField] && currentTag == "" {
+			switch {
+			case currentArrayField != "" && sigInfo.NewlineJoinedArrayFields[currentArrayField] && currentTag == "":
 				arrayJoinedLooseText.WriteString(string(t))
-			} else if currentMapField != "" && currentTag == "" {
+			case currentMapField != "" && currentTag == "":
 				mapLooseText.WriteString(string(t))
-			} else if currentTag != "" {
+			case currentTag != "":
 				content := string(t)
 				if !config.PreserveWhitespace {
 					content = strings.TrimSpace(content)

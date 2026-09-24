@@ -87,7 +87,7 @@ func WriteReport(cfg Config, report Report) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal run report: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o640); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", fmt.Errorf("write run report: %w", err)
 	}
 	return path, nil

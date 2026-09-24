@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/behaviorengineering/strop/pkg/orchestration"
 	"github.com/behaviorengineering/strop/pkg/stepplan"
@@ -51,6 +52,20 @@ type OpenOptions struct {
 	Steps []StepSpec
 	// ForceNew deletes any existing plan for this identity and starts fresh.
 	ForceNew bool
+	// InvalidateFromStep, when the source fingerprint changes on reopen, keeps
+	// completed checkpoints before this step and drops from this step onwards.
+	// Empty means drop all checkpoints (legacy fail-closed behavior).
+	InvalidateFromStep string
+}
+
+// StepSummary is a read-only view of one plan step and its checkpoint, if any.
+type StepSummary struct {
+	ID          string    `json:"id"`
+	Status      string    `json:"status"` // complete | incomplete | failed
+	Score       float64   `json:"score,omitempty"`
+	Feedback    string    `json:"feedback,omitempty"`
+	Rationale   string    `json:"rationale,omitempty"`
+	CompletedAt time.Time `json:"completed_at,omitempty"`
 }
 
 // Open creates or loads a trajectory plan under Root/plans/<planID>/.
@@ -100,7 +115,7 @@ func Open(ctx context.Context, opts OpenOptions) (*Session, error) {
 		if err := assertIdentity(existing, id); err != nil {
 			return nil, err
 		}
-		if err := syncSourceFingerprint(ctx, store, existing, id); err != nil {
+		if err := syncSourceFingerprint(ctx, store, existing, id, opts.InvalidateFromStep); err != nil {
 			return nil, err
 		}
 		if err := store.SavePlan(ctx, existing); err != nil {
@@ -114,7 +129,11 @@ func Open(ctx context.Context, opts OpenOptions) (*Session, error) {
 			ID:      id,
 			Resumed: true,
 		}
-		sess.ResumedFrom = firstIncomplete(ctx, store, existing)
+		resumedFrom, err := firstIncomplete(ctx, store, existing)
+		if err != nil {
+			return nil, err
+		}
+		sess.ResumedFrom = resumedFrom
 		return sess, nil
 	}
 	if loadErr != nil && !isNotFound(loadErr) {
@@ -266,6 +285,89 @@ func (s *Session) SaveCompleteEvidence(ctx context.Context, stepID string, ev Ev
 	return nil
 }
 
+// CompletedSteps returns complete step ids in plan order (alias of ListCompleted keys).
+func (s *Session) CompletedSteps(ctx context.Context) ([]string, error) {
+	return s.ListCompleted(ctx)
+}
+
+// LastCompletedStep returns the last complete step id in plan order.
+func (s *Session) LastCompletedStep(ctx context.Context) (string, bool) {
+	done, err := s.ListCompleted(ctx)
+	if err != nil || len(done) == 0 {
+		return "", false
+	}
+	return done[len(done)-1], true
+}
+
+// StepSummaries returns status for every plan step in order.
+func (s *Session) StepSummaries(ctx context.Context) ([]StepSummary, error) {
+	if s == nil || s.Store == nil || s.Plan == nil {
+		return nil, fmt.Errorf("trajectory: session is not open")
+	}
+	out := make([]StepSummary, 0, len(s.Plan.Steps))
+	for _, step := range s.Plan.Steps {
+		sum := StepSummary{ID: step.ID, Status: "incomplete"}
+		cp, err := s.Store.LoadStep(ctx, s.Plan.ID, step.EffectiveCheckpointKey())
+		if err != nil {
+			if isNotFound(err) {
+				out = append(out, sum)
+				continue
+			}
+			return nil, fmt.Errorf("trajectory: load step %q: %w", step.ID, err)
+		}
+		sum.CompletedAt = cp.CompletedAt
+		switch cp.Status {
+		case stepplan.StepStatusComplete:
+			want := stepplan.FingerprintInputs(step.InputRefs)
+			if want != "" && cp.InputFingerprint != "" && cp.InputFingerprint != want {
+				sum.Status = "incomplete"
+			} else {
+				sum.Status = "complete"
+				if ev, evErr := UnmarshalEvidence(cp.Output); evErr == nil {
+					sum.Score = ev.Score
+					sum.Feedback = ev.Feedback
+					sum.Rationale = ev.Rationale
+				}
+			}
+		case stepplan.StepStatusFailed:
+			sum.Status = "failed"
+			sum.Feedback = cp.Error
+		default:
+			sum.Status = "incomplete"
+		}
+		out = append(out, sum)
+	}
+	return out, nil
+}
+
+// RollbackTo invalidates checkpoints from stepID inclusive through the end of the plan.
+// Prior completed steps are kept. Updates ResumedFrom to stepID when successful.
+func (s *Session) RollbackTo(ctx context.Context, stepID string) error {
+	if s == nil || s.Store == nil || s.Plan == nil {
+		return fmt.Errorf("trajectory: session is not open")
+	}
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" {
+		return fmt.Errorf("trajectory: rollback step id is required")
+	}
+	fromIndex := -1
+	want := sanitizeID(stepID)
+	for i, step := range s.Plan.Steps {
+		if step.EffectiveCheckpointKey() == want || sanitizeID(step.ID) == want {
+			fromIndex = i
+			break
+		}
+	}
+	if fromIndex < 0 {
+		return fmt.Errorf("trajectory: unknown step %q", stepID)
+	}
+	if err := stepplan.InvalidateFrom(ctx, s.Store, s.Plan, fromIndex); err != nil {
+		return fmt.Errorf("trajectory: rollback to %q: %w", stepID, err)
+	}
+	s.ResumedFrom = s.Plan.Steps[fromIndex].ID
+	return nil
+}
+
 func assertIdentity(plan *stepplan.Plan, id Identity) error {
 	extra := plan.Extra
 	if extra == nil {
@@ -280,7 +382,10 @@ func assertIdentity(plan *stepplan.Plan, id Identity) error {
 	if got := stringField(extra, extraEntityKey); got != strings.TrimSpace(id.EntityID) {
 		return fmt.Errorf("trajectory: entity mismatch want %q got %q", id.EntityID, got)
 	}
-	defVer := intField(extra, extraDefinitionVersionKey)
+	defVer, err := intField(extra, extraDefinitionVersionKey)
+	if err != nil {
+		return fmt.Errorf("trajectory: definition_version: %w", err)
+	}
 	wantDef := id.DefinitionVersion
 	if wantDef <= 0 {
 		wantDef = DefinitionVersion
@@ -298,7 +403,7 @@ func assertIdentity(plan *stepplan.Plan, id Identity) error {
 	return nil
 }
 
-func syncSourceFingerprint(ctx context.Context, store stepplan.Store, plan *stepplan.Plan, id Identity) error {
+func syncSourceFingerprint(ctx context.Context, store stepplan.Store, plan *stepplan.Plan, id Identity, invalidateFromStep string) error {
 	if plan.Extra == nil {
 		plan.Extra = map[string]any{}
 	}
@@ -320,10 +425,43 @@ func syncSourceFingerprint(ctx context.Context, store stepplan.Store, plan *step
 		}
 	}
 	if prev != "" && prev != id.SourceFingerprint {
-		// Source changed: drop all checkpoints. Required so resume cannot reuse
-		// scored work from a different input fingerprint.
-		if err := stepplan.InvalidateFrom(ctx, store, plan, 0); err != nil {
+		fromIndex := 0
+		if target := strings.TrimSpace(invalidateFromStep); target != "" {
+			want := sanitizeID(target)
+			found := false
+			for i, step := range plan.Steps {
+				if step.EffectiveCheckpointKey() == want || sanitizeID(step.ID) == want {
+					fromIndex = i
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("trajectory: invalidate_from_step %q not in plan", target)
+			}
+		}
+		// Source changed: drop checkpoints from fromIndex (0 = all). When
+		// InvalidateFromStep is set, earlier completed steps stay and are
+		// restamped so InputFingerprint matches the new source hash.
+		if err := stepplan.InvalidateFrom(ctx, store, plan, fromIndex); err != nil {
 			return fmt.Errorf("trajectory: invalidate after source change: %w", err)
+		}
+		for i := 0; i < fromIndex && i < len(plan.Steps); i++ {
+			step := plan.Steps[i]
+			cp, err := store.LoadStep(ctx, plan.ID, step.EffectiveCheckpointKey())
+			if err != nil {
+				if isNotFound(err) {
+					continue
+				}
+				return fmt.Errorf("trajectory: load checkpoint %q for restamp: %w", step.ID, err)
+			}
+			if cp.Status != stepplan.StepStatusComplete {
+				continue
+			}
+			cp.InputFingerprint = stepplan.FingerprintInputs(step.InputRefs)
+			if err := store.SaveStep(ctx, cp); err != nil {
+				return fmt.Errorf("trajectory: restamp checkpoint %q: %w", step.ID, err)
+			}
 		}
 	}
 	return nil
@@ -344,18 +482,24 @@ func identityExtra(id Identity) map[string]any {
 	return extra
 }
 
-func firstIncomplete(ctx context.Context, store stepplan.Store, plan *stepplan.Plan) string {
+func firstIncomplete(ctx context.Context, store stepplan.Store, plan *stepplan.Plan) (string, error) {
 	for _, step := range plan.Steps {
 		cp, err := store.LoadStep(ctx, plan.ID, step.EffectiveCheckpointKey())
-		if err != nil || cp.Status != stepplan.StepStatusComplete {
-			return step.ID
+		if err != nil {
+			if isNotFound(err) {
+				return step.ID, nil
+			}
+			return "", fmt.Errorf("trajectory: load checkpoint %q: %w", step.ID, err)
+		}
+		if cp.Status != stepplan.StepStatusComplete {
+			return step.ID, nil
 		}
 		want := stepplan.FingerprintInputs(step.InputRefs)
 		if want != "" && cp.InputFingerprint != "" && cp.InputFingerprint != want {
-			return step.ID
+			return step.ID, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func findStep(plan *stepplan.Plan, stepID string) (stepplan.Step, bool) {
@@ -381,25 +525,30 @@ func stringField(extra map[string]any, key string) string {
 	}
 }
 
-func intField(extra map[string]any, key string) int {
+func intField(extra map[string]any, key string) (int, error) {
 	v, ok := extra[key]
 	if !ok || v == nil {
-		return 0
+		return 0, nil
 	}
 	switch t := v.(type) {
 	case int:
-		return t
+		return t, nil
 	case int64:
-		return int(t)
+		return int(t), nil
 	case float64:
-		return int(t)
+		return int(t), nil
 	case json.Number:
-		n, _ := t.Int64()
-		return int(n)
+		n, err := t.Int64()
+		if err != nil {
+			return 0, fmt.Errorf("invalid %s %q: %w", key, t.String(), err)
+		}
+		return int(n), nil
 	default:
 		var n int
-		_, _ = fmt.Sscanf(fmt.Sprint(t), "%d", &n)
-		return n
+		if _, err := fmt.Sscanf(fmt.Sprint(t), "%d", &n); err != nil {
+			return 0, fmt.Errorf("invalid %s %v: %w", key, t, err)
+		}
+		return n, nil
 	}
 }
 

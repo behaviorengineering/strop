@@ -124,6 +124,11 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 			baseURL = "https://generativelanguage.googleapis.com"
 		}
 
+		var groundingClient *http.Client
+		if getter, ok := llmInstance.(httpClientGetter); ok {
+			groundingClient = getter.GetHTTPClient()
+		}
+
 		llmInstance = NewGroundingLLMWrapper(
 			llmInstance,
 			provider.Grounding,
@@ -131,6 +136,7 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 			baseURL,
 			string(modelID),
 			providerTimeout,
+			groundingClient,
 			f.logger,
 		)
 
@@ -142,25 +148,7 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 		}
 	}
 
-	// dspy-go OpenAILLM does not implement GenerateWithContent; wrap OpenAI-compatible
-	// providers so multimodal (image_url) requests reach proxies like Polypus.
-	if apiSchema == "openai" {
-		llmInstance = NewOpenAIVisionLLMWrapper(
-			llmInstance,
-			provider.APIKey,
-			provider.BaseURL,
-			string(modelID),
-			providerTimeout,
-			f.logger,
-		)
-
-		if f.logger != nil {
-			f.logger.WithFields(map[string]interface{}{
-				"model":    string(modelID),
-				"base_url": provider.BaseURL,
-			}).Debug("Wrapped OpenAI-compatible LLM with multimodal vision support")
-		}
-	}
+	// Multimodal GenerateWithContent is provided by dspy-go GeneratorLLM via llm-go.
 
 	// Wrap with output token limit wrapper if max_output_tokens is configured
 	if provider.MaxOutputTokens > 0 {

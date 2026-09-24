@@ -47,7 +47,7 @@ type LearningServiceForGeneration interface {
 		limit int,
 	) ([]*LearningExampleArtifact, error)
 	// GetGuidesForGeneration returns transferable principle strings (content_rule).
-	// Fail open: empty slice when none; errors are logged by JobRunner.
+	// Empty slice when none exist; retrieval errors fail Generate (same as examples).
 	GetGuidesForGeneration(
 		ctx context.Context,
 		job string,
@@ -163,8 +163,12 @@ func (r *JobRunner) GenerateResult(
 	}
 	inputs := input.ToMap()
 	inputs[stropdspy.FieldIterationVersion] = input.GetVersion()
-	r.fillRetrievedGuides(ctx, config.JobName, config.StepName, inputs)
-	appendACEPlaybook(ctx, inputs)
+	if err := r.fillRetrievedGuides(ctx, config.JobName, config.StepName, inputs); err != nil {
+		return nil, newGenerationError(config, "failed to retrieve learning guides", err)
+	}
+	if err := appendACEPlaybook(ctx, config.JobName, inputs); err != nil {
+		return nil, newGenerationError(config, "failed to inject ACE playbook", err)
+	}
 
 	if eventChan != nil {
 		ctx = streaming.ContextWithEventChannel(ctx, eventChan)
@@ -177,8 +181,8 @@ func (r *JobRunner) GenerateResult(
 		jobName, stepName := config.JobName, config.StepName
 		beforeProcess = func(m core.Module) error {
 			selection, err := r.retrieveAndSetExamples(ctx, m, jobName, stepName, inputs)
-			if err != nil && r.logger != nil {
-				r.logger.WithError(err).Warn("Failed to retrieve learning examples, continuing without examples")
+			if err != nil {
+				return err
 			}
 			demos = selection
 			return nil
@@ -293,22 +297,18 @@ func (r *JobRunner) retrieveAndSetExamples(
 const maxRetrievedGuides = 2
 
 // fillRetrievedGuides loads content_rule principles into inputs[FieldRetrievedGuides].
-// Fail-open: leaves empty string when learning is nil or retrieval fails.
+// Empty guides when none exist is fine; retrieval errors fail closed.
 func (r *JobRunner) fillRetrievedGuides(
 	ctx context.Context,
 	job, step string,
 	inputs map[string]interface{},
-) {
+) error {
 	if r.learningService == nil || inputs == nil {
-		return
+		return nil
 	}
 	guides, err := r.learningService.GetGuidesForGeneration(ctx, job, step, inputs, maxRetrievedGuides)
 	if err != nil {
-		if r.logger != nil {
-			r.logger.WithError(err).Warn("Failed to retrieve learning guides, continuing without guides")
-		}
-		inputs[stropdspy.FieldRetrievedGuides] = ""
-		return
+		return fmt.Errorf("retrieve learning guides: %w", err)
 	}
 	inputs[stropdspy.FieldRetrievedGuides] = FormatRetrievedGuides(guides)
 	if r.logger != nil && len(guides) > 0 {
@@ -316,27 +316,36 @@ func (r *JobRunner) fillRetrievedGuides(
 			"job": job, "step": step, "guides": len(guides),
 		}).Debug("Filled retrieved_guides on generator inputs")
 	}
+	return nil
 }
 
 // appendACEPlaybook merges ambient ACE LearningsContext into FieldRetrievedGuides.
-// Fail-open when no Manager is on ctx. Does not construct ACE. Generate only, not Evaluate.
-func appendACEPlaybook(ctx context.Context, inputs map[string]interface{}) {
+// No Manager on ctx skips ACE. When a Manager is present, binding mismatch fails Generate.
+func appendACEPlaybook(ctx context.Context, job string, inputs map[string]interface{}) error {
 	if inputs == nil {
-		return
+		return nil
 	}
 	m := ace.FromContext(ctx)
 	if m == nil {
-		return
+		return nil
+	}
+	jobKey := strings.TrimSpace(job)
+	if jobKey == "" {
+		jobKey = m.Job()
+	}
+	if err := m.CheckBinding(m.EntityID(), jobKey); err != nil {
+		return err
 	}
 	playbook := m.LearningsContext()
 	if strings.TrimSpace(playbook) == "" {
-		return
+		return nil
 	}
 	existing := ""
 	if s, ok := inputs[stropdspy.FieldRetrievedGuides].(string); ok {
 		existing = s
 	}
 	inputs[stropdspy.FieldRetrievedGuides] = ace.MergePlaybookIntoGuides(existing, playbook)
+	return nil
 }
 
 // FormatRetrievedGuides renders transferable principles as XML items for the generator input.

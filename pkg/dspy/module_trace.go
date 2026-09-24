@@ -23,7 +23,7 @@ func AttachModuleTrace(ctx context.Context, dir string, metadata map[string]any)
 	if dir == "" {
 		return ctx, func() error { return nil }, fmt.Errorf("AttachModuleTrace: dir is required")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return ctx, nil, fmt.Errorf("AttachModuleTrace: mkdir %s: %w", dir, err)
 	}
 	stamp := time.Now().UTC().Format("20060102-150405")
