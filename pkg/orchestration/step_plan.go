@@ -140,6 +140,17 @@ func RunStepPlan(
 			continue
 		}
 
+		// Drop this step and every later checkpoint so resume cannot skip stale
+		// downstream work after an earlier step re-runs. Uses optional
+		// stepplan.CheckpointInvalidator; stores without it fail when downstream exists.
+		if from := stepIndex(plan, step.ID); from >= 0 {
+			if err := stepplan.InvalidateFrom(ctx, store, plan, from); err != nil {
+				runErr = fmt.Errorf("orchestration: invalidate from %q: %w", step.ID, err)
+				result.Err = runErr
+				return result, runErr
+			}
+		}
+
 		completed, attempts, err := runOneStep(ctx, plan, step, store, runner, maxAttempts, classify, sleep, cfg, eventChan)
 		if err != nil {
 			result.FailedStepID = step.ID
@@ -340,6 +351,19 @@ func planKindOrDefault(plan *stepplan.Plan) string {
 		return "step_plan"
 	}
 	return kind
+}
+
+func stepIndex(plan *stepplan.Plan, stepID string) int {
+	if plan == nil {
+		return -1
+	}
+	want := strings.TrimSpace(stepID)
+	for i, step := range plan.Steps {
+		if strings.TrimSpace(step.ID) == want {
+			return i
+		}
+	}
+	return -1
 }
 
 func sendStepPlanEvent(eventChan streaming.EventChannel, content string) {

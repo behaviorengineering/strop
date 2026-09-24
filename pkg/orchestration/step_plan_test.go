@@ -230,6 +230,57 @@ func TestRunStepPlanStaleFingerprintReruns(t *testing.T) {
 	}
 }
 
+func TestRunStepPlanRerunDeletesDownstream(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, err := stepplan.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := stepplan.NewPlan("invalidate_plan", "test", []stepplan.Step{
+		{ID: "s1", Goal: "one", InputRefs: []stepplan.InputRef{{Key: "in", Hash: "old"}}, DoneCriteria: stepplan.DoneCriteria{RequiredKeys: []string{"v"}}},
+		{ID: "s2", Goal: "two", DoneCriteria: stepplan.DoneCriteria{RequiredKeys: []string{"v"}}},
+		{ID: "s3", Goal: "three", DoneCriteria: stepplan.DoneCriteria{RequiredKeys: []string{"v"}}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SavePlan(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range plan.Steps {
+		body, _ := json.Marshal(map[string]any{"v": step.ID})
+		cp, err := stepplan.NewCompleteCheckpoint(plan.ID, step, body, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SaveStep(ctx, cp); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plan.Steps[0].InputRefs[0].Hash = "new"
+	var ran []string
+	runner := StepRunnerFunc(func(ctx context.Context, p *stepplan.Plan, step stepplan.Step) (*StepRunResult, error) {
+		ran = append(ran, step.ID)
+		body, err := json.Marshal(map[string]any{"v": step.ID + "-new"})
+		if err != nil {
+			return nil, err
+		}
+		return &StepRunResult{Output: body}, nil
+	})
+	res, err := RunStepPlan(ctx, plan, store, runner, StepPlanConfig{MaxAttemptsPerStep: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.SkippedSteps) != 0 {
+		t.Fatalf("skipped=%v", res.SkippedSteps)
+	}
+	if len(ran) != 3 || ran[0] != "s1" || ran[1] != "s2" || ran[2] != "s3" {
+		t.Fatalf("ran=%v", ran)
+	}
+}
+
 func TestClassifyTransientStepError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

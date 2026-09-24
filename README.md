@@ -19,6 +19,7 @@ import (
     "github.com/behaviorengineering/strop/pkg/humanreview/reviewflow"
     "github.com/behaviorengineering/strop/pkg/jobskip"
     "github.com/behaviorengineering/strop/pkg/stepplan"
+    "github.com/behaviorengineering/strop/pkg/trajectory"
     "github.com/behaviorengineering/strop/pkg/concurrency"
 )
 ```
@@ -50,6 +51,7 @@ import (
 | `pkg/humanreview/reviewflow` | pterm-free engine, live states, Prompter / Generator / Session ports |
 | `pkg/jobskip` | Per-job generate-queue skip Store + Restore (Labeler / Selector ports) |
 | `pkg/stepplan` | Ordered plan artifact + filesystem step checkpoints for resumable drivers |
+| `pkg/trajectory` | Product-neutral session/identity/evidence adapter over stepplan for predefined-path resume |
 | `pkg/concurrency` | Adaptive in-flight limiter and `RunPool` for parallel independent LLM units |
 
 ## Boundary rules
