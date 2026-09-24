@@ -12,8 +12,13 @@ import (
 // ErrNotFound is returned when a plan or checkpoint is missing.
 var ErrNotFound = errors.New("stepplan: not found")
 
+// ErrInvalidationUnsupported is returned when downstream checkpoint deletion is
+// required but Store does not implement CheckpointInvalidator.
+var ErrInvalidationUnsupported = errors.New("stepplan: store does not support checkpoint invalidation")
+
 // Store persists plans and per-step checkpoints.
 // Implementations must not require a strop-level transaction type.
+// Optional capability: CheckpointInvalidator for dropping stale checkpoints.
 type Store interface {
 	// SavePlan writes the plan artifact. Call after NewPlan / before RunStepPlan.
 	SavePlan(ctx context.Context, plan *Plan) error
@@ -27,6 +32,55 @@ type Store interface {
 	LoadStep(ctx context.Context, planID, checkpointKey string) (*Checkpoint, error)
 	// ListCompleted returns checkpoint keys with Status == complete for the plan.
 	ListCompleted(ctx context.Context, planID string) ([]string, error)
+}
+
+// CheckpointInvalidator is an optional Store capability that deletes checkpoints
+// so a re-run cannot skip stale downstream work.
+type CheckpointInvalidator interface {
+	// DeleteStep removes one step checkpoint. Missing keys are not an error.
+	DeleteStep(ctx context.Context, planID, checkpointKey string) error
+	// DeleteStepsAfter removes checkpoints for plan.Steps[fromIndex:] (inclusive).
+	DeleteStepsAfter(ctx context.Context, plan *Plan, fromIndex int) error
+}
+
+// AsCheckpointInvalidator returns the invalidator when store implements it.
+func AsCheckpointInvalidator(store Store) (CheckpointInvalidator, bool) {
+	if store == nil {
+		return nil, false
+	}
+	inv, ok := store.(CheckpointInvalidator)
+	return inv, ok
+}
+
+// InvalidateFrom deletes checkpoints for plan.Steps[fromIndex:] when store
+// implements CheckpointInvalidator. When the capability is missing and later
+// steps exist, returns ErrInvalidationUnsupported so callers fail closed.
+// When fromIndex is the last step only, a missing capability is a no-op because
+// SaveStep can overwrite that checkpoint.
+func InvalidateFrom(ctx context.Context, store Store, plan *Plan, fromIndex int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if store == nil {
+		return fmt.Errorf("stepplan: store is nil")
+	}
+	if plan == nil {
+		return fmt.Errorf("stepplan: plan is nil")
+	}
+	if fromIndex < 0 {
+		fromIndex = 0
+	}
+	inv, ok := AsCheckpointInvalidator(store)
+	if !ok {
+		if fromIndex < len(plan.Steps)-1 {
+			return fmt.Errorf("%w: need DeleteStepsAfter from index %d", ErrInvalidationUnsupported, fromIndex)
+		}
+		return nil
+	}
+	if err := inv.DeleteStepsAfter(ctx, plan, fromIndex); err != nil {
+		return fmt.Errorf("stepplan: invalidate from index %d: %w", fromIndex, err)
+	}
+	return nil
 }
 
 // FingerprintInputs builds a stable fingerprint from ordered InputRefs.

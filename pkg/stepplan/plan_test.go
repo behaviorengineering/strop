@@ -192,3 +192,93 @@ func TestNewFileStoreRequiresRoot(t *testing.T) {
 		t.Fatal("expected empty root to fail")
 	}
 }
+
+func TestFileStoreDeleteStepsAfter(t *testing.T) {
+	t.Parallel()
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	plan, err := NewPlan("p_del", "test", []Step{
+		{ID: "s1", Goal: "one"},
+		{ID: "s2", Goal: "two"},
+		{ID: "s3", Goal: "three"},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SavePlan(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range plan.Steps {
+		cp, err := NewCompleteCheckpoint(plan.ID, step, json.RawMessage(`{"ok":true}`), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SaveStep(ctx, cp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.DeleteStepsAfter(ctx, plan, 1); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := store.ListCompleted(ctx, plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(completed) != 1 || completed[0] != "s1" {
+		t.Fatalf("completed=%v want [s1]", completed)
+	}
+	if _, err := store.LoadStep(ctx, plan.ID, "s2"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("s2 load err=%v", err)
+	}
+}
+
+func TestInvalidateFromRequiresCapabilityForDownstream(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	plan, err := NewPlan("p_inv", "test", []Step{
+		{ID: "s1", Goal: "one"},
+		{ID: "s2", Goal: "two"},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &minimalStore{}
+	err = InvalidateFrom(ctx, store, plan, 0)
+	if !errors.Is(err, ErrInvalidationUnsupported) {
+		t.Fatalf("err=%v want ErrInvalidationUnsupported", err)
+	}
+	// Last step only: missing capability is a no-op.
+	if err := InvalidateFrom(ctx, store, plan, 1); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAsCheckpointInvalidatorFileStore(t *testing.T) {
+	t.Parallel()
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, ok := AsCheckpointInvalidator(store)
+	if !ok || inv == nil {
+		t.Fatal("FileStore must implement CheckpointInvalidator")
+	}
+}
+
+// minimalStore implements Store without CheckpointInvalidator.
+type minimalStore struct{}
+
+func (m *minimalStore) SavePlan(context.Context, *Plan) error { return nil }
+func (m *minimalStore) LoadPlan(context.Context, string) (*Plan, error) {
+	return nil, ErrNotFound
+}
+func (m *minimalStore) SaveStep(context.Context, *Checkpoint) error { return nil }
+func (m *minimalStore) LoadStep(context.Context, string, string) (*Checkpoint, error) {
+	return nil, ErrNotFound
+}
+func (m *minimalStore) ListCompleted(context.Context, string) ([]string, error) {
+	return nil, nil
+}

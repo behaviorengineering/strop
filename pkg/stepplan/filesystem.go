@@ -16,6 +16,12 @@ type FileStore struct {
 	Root string
 }
 
+// Compile-time check: FileStore implements Store and CheckpointInvalidator.
+var (
+	_ Store                 = (*FileStore)(nil)
+	_ CheckpointInvalidator = (*FileStore)(nil)
+)
+
 // NewFileStore returns a FileStore for the given Root (e.g. seed work-story dir).
 func NewFileStore(root string) (*FileStore, error) {
 	root = strings.TrimSpace(root)
@@ -233,4 +239,49 @@ func (s *FileStore) ListCompleted(ctx context.Context, planID string) ([]string,
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// DeleteStep removes steps/<checkpointKey>.json. Missing files are ignored.
+func (s *FileStore) DeleteStep(ctx context.Context, planID, checkpointKey string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s == nil || s.Root == "" {
+		return fmt.Errorf("stepplan: store root is required")
+	}
+	if err := validateID(planID, "plan id"); err != nil {
+		return err
+	}
+	if err := validateID(checkpointKey, "checkpoint key"); err != nil {
+		return err
+	}
+	stepsDir, err := s.stepsDir(planID)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(stepsDir, strings.TrimSpace(checkpointKey)+".json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stepplan: delete checkpoint: %w", err)
+	}
+	return nil
+}
+
+// DeleteStepsAfter removes checkpoints for plan.Steps[fromIndex:] (inclusive of fromIndex).
+func (s *FileStore) DeleteStepsAfter(ctx context.Context, plan *Plan, fromIndex int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if plan == nil {
+		return fmt.Errorf("stepplan: plan is nil")
+	}
+	if fromIndex < 0 {
+		fromIndex = 0
+	}
+	for i := fromIndex; i < len(plan.Steps); i++ {
+		key := plan.Steps[i].EffectiveCheckpointKey()
+		if err := s.DeleteStep(ctx, plan.ID, key); err != nil {
+			return err
+		}
+	}
+	return nil
 }
