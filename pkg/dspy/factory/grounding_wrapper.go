@@ -235,7 +235,7 @@ func (g *GroundingLLMWrapper) makeRequest(ctx context.Context, reqBody map[strin
 	if g.logger != nil {
 		endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", g.baseURL, g.modelID)
 		g.logger.WithFields(map[string]interface{}{
-			"model":       g.modelID,
+			logFieldModel: g.modelID,
 			"endpoint":    endpoint,
 			"has_api_key": strings.TrimSpace(g.apiKey) != "",
 			"has_tool":    true,
