@@ -10,7 +10,7 @@ const (
 	exactMapKeysMarker      = "Exact map keys:"
 )
 
-// criterionIDMappingArrow matches score-prompt lines like: - Name → "instruction_compliance"
+// criterionIDMappingArrow matches score-prompt lines like: - Name → "instruction_compliance".
 var criterionIDMappingArrow = regexp.MustCompile(`→\s*"([a-z][a-z0-9_]*)"`)
 
 // ParseCriterionIDsFromMappingPrompt extracts criterion IDs from CRITERION ID MAPPING lines in a score prompt.

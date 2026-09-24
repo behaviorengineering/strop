@@ -134,7 +134,13 @@ func RunStepPlan(
 		}
 
 		key := step.EffectiveCheckpointKey()
-		if shouldSkipStep(ctx, store, plan.ID, step) {
+		skip, skipErr := shouldSkipStep(ctx, store, plan.ID, step)
+		if skipErr != nil {
+			runErr = skipErr
+			result.Err = runErr
+			return result, runErr
+		}
+		if skip {
 			result.SkippedSteps = append(result.SkippedSteps, key)
 			sendStepPlanEvent(eventChan, fmt.Sprintf("Step plan %s skip %s (checkpoint complete)", plan.ID, step.ID))
 			continue
@@ -311,19 +317,22 @@ func persistFailed(ctx context.Context, store stepplan.Store, planID string, ste
 	return err
 }
 
-func shouldSkipStep(ctx context.Context, store stepplan.Store, planID string, step stepplan.Step) bool {
+func shouldSkipStep(ctx context.Context, store stepplan.Store, planID string, step stepplan.Step) (bool, error) {
 	cp, err := store.LoadStep(ctx, planID, step.EffectiveCheckpointKey())
 	if err != nil {
-		return false
+		if errors.Is(err, stepplan.ErrNotFound) {
+			return false, nil
+		}
+		return false, wrap("shouldSkipStep", fmt.Errorf("load checkpoint %q: %w", step.EffectiveCheckpointKey(), err))
 	}
 	if cp.Status != stepplan.StepStatusComplete {
-		return false
+		return false, nil
 	}
 	want := stepplan.FingerprintInputs(step.InputRefs)
 	if want == "" {
-		return true
+		return true, nil
 	}
-	return cp.InputFingerprint == "" || cp.InputFingerprint == want
+	return cp.InputFingerprint == "" || cp.InputFingerprint == want, nil
 }
 
 func runPlanStep(ctx context.Context, runner StepRunner, plan *stepplan.Plan, step stepplan.Step) (*StepRunResult, error) {

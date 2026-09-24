@@ -24,13 +24,6 @@ func TestRLMDefaults(t *testing.T) {
 	}
 }
 
-func TestCreateRLMModuleRequiresLLM(t *testing.T) {
-	_, err := stropdspy.CreateRLMModule(nil, stropdspy.RLMDefaults())
-	if err == nil {
-		t.Fatal("expected error for nil llm")
-	}
-}
-
 func TestRLMConfigCreateModuleRequiresLLM(t *testing.T) {
 	cfg := stropdspy.RLMDefaults()
 	_, err := cfg.CreateModule()

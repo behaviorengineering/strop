@@ -311,12 +311,13 @@ func RunPerItemRefinementLoopWithIndices(
 					allScores = append(allScores, score)
 					allFeedbacks = append(allFeedbacks, feedback)
 					allRationales = append(allRationales, rationale)
-					if shouldStop && round < maxVersions {
+					switch {
+					case shouldStop && round < maxVersions:
 						finishACE(ace.OutcomeSuccess)
 						sendEvent(eventChan, fmt.Sprintf("Item %d/%d: accepted (score %.1f)", i+1, n, score))
-					} else if shouldStop {
+					case shouldStop:
 						finishACE(ace.OutcomeSuccess)
-					} else {
+					default:
 						finishACE(ace.OutcomePartial)
 					}
 					stopItem = true

@@ -90,8 +90,8 @@ func (w *OutputTokenLimitWrapper) injectMaxTokens(options []core.GenerateOption)
 			opts.MaxTokens = w.maxOutputTokens
 			if w.logger != nil {
 				w.logger.WithFields(map[string]interface{}{
-					"model":             w.modelID,
-					"max_output_tokens": w.maxOutputTokens,
+					logFieldModel:           w.modelID,
+					logFieldMaxOutputTokens: w.maxOutputTokens,
 				}).Debug("Injected max_output_tokens into GenerateOptions")
 			}
 		}
@@ -134,10 +134,10 @@ func (w *OutputTokenLimitWrapper) validateResponseTokens(response *core.LLMRespo
 
 		if w.logger != nil {
 			w.logger.WithFields(map[string]interface{}{
-				"model":             w.modelID,
-				"response_tokens":   tokenCount,
-				"max_output_tokens": w.maxOutputTokens,
-				"response_preview":  truncateString(response.Content, 200),
+				logFieldModel:           w.modelID,
+				"response_tokens":       tokenCount,
+				logFieldMaxOutputTokens: w.maxOutputTokens,
+				"response_preview":      truncateString(response.Content, 200),
 			}).Error(errorMsg)
 		}
 
@@ -146,9 +146,9 @@ func (w *OutputTokenLimitWrapper) validateResponseTokens(response *core.LLMRespo
 
 	if w.logger != nil {
 		w.logger.WithFields(map[string]interface{}{
-			"model":             w.modelID,
-			"response_tokens":   tokenCount,
-			"max_output_tokens": w.maxOutputTokens,
+			logFieldModel:           w.modelID,
+			"response_tokens":       tokenCount,
+			logFieldMaxOutputTokens: w.maxOutputTokens,
 		}).Debug("Response token count validated")
 	}
 

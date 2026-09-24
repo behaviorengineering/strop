@@ -83,7 +83,7 @@ func (l *Limiter) Record(latency time.Duration, err error) {
 
 	switch outcome {
 	case OutcomeTrip:
-		l.limit = l.limit / 2
+		l.limit /= 2
 		if l.limit < l.cfg.Min {
 			l.limit = l.cfg.Min
 		}

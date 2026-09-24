@@ -1,0 +1,23 @@
+{
+  "source": "synthetic",
+  "operation": "Predict:strop_demo_evaluator",
+  "task": "strop_demo_evaluator",
+  "fields": {
+    "generator_input": {
+      "original_text": "sample"
+    },
+    "generator_output": {
+      "summary": "sample summary"
+    },
+    "iterationVersion": 1
+  },
+  "recorded_outputs": {
+    "directives_ack": "score criteria",
+    "feedback": "Meets the bar.",
+    "rationale": "Clear mechanism.",
+    "criterion_scores": {
+      "clarity": 1.5,
+      "grounding": 1.0
+    }
+  }
+}

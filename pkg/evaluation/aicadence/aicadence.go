@@ -86,7 +86,7 @@ func HeuristicHits(prose string) []string {
 	return hits
 }
 
-// Short antithetical clauses joined by semicolon: "Stress drains; purpose concentrates."
+// Short antithetical clauses joined by semicolon ("Stress drains; purpose concentrates").
 var semicolonAphorism = regexp.MustCompile(`(?i)\b([A-Za-z][\w'-]{0,24}(?:\s+[A-Za-z][\w'-]{0,24}){0,4})\s*;\s*([A-Za-z][\w'-]{0,24}(?:\s+[A-Za-z][\w'-]{0,24}){0,4})\.`)
 
 // Adjacent short sentences that open with antonym bookends.

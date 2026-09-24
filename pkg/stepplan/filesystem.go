@@ -3,6 +3,7 @@ package stepplan
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -82,7 +83,7 @@ func (s *FileStore) SavePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("stepplan: marshal plan: %w", err)
 	}
 	path := filepath.Join(dir, FilePlan)
-	if err := os.WriteFile(path, data, 0o640); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("stepplan: write plan: %w", err)
 	}
 	return nil
@@ -110,7 +111,7 @@ func (s *FileStore) LoadPlan(ctx context.Context, planID string) (*Plan, error) 
 	}
 	var plan Plan
 	if err := json.Unmarshal(data, &plan); err != nil {
-		return nil, fmt.Errorf("stepplan: unmarshal plan: %w", err)
+		return nil, corrupt("LoadPlan", "unmarshal plan", err)
 	}
 	if plan.ID == "" {
 		plan.ID = strings.TrimSpace(planID)
@@ -165,7 +166,7 @@ func (s *FileStore) SaveStep(ctx context.Context, cp *Checkpoint) error {
 		return fmt.Errorf("stepplan: marshal checkpoint: %w", err)
 	}
 	path := filepath.Join(stepsDir, key+".json")
-	if err := os.WriteFile(path, data, 0o640); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("stepplan: write checkpoint: %w", err)
 	}
 	return nil
@@ -199,7 +200,7 @@ func (s *FileStore) LoadStep(ctx context.Context, planID, checkpointKey string) 
 	}
 	var cp Checkpoint
 	if err := json.Unmarshal(data, &cp); err != nil {
-		return nil, fmt.Errorf("stepplan: unmarshal checkpoint: %w", err)
+		return nil, corrupt("LoadStep", "unmarshal checkpoint", err)
 	}
 	return &cp, nil
 }
@@ -231,7 +232,10 @@ func (s *FileStore) ListCompleted(ctx context.Context, planID string) ([]string,
 		key := strings.TrimSuffix(e.Name(), ".json")
 		cp, err := s.LoadStep(ctx, planID, key)
 		if err != nil {
-			continue
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			return nil, wrap("ListCompleted", fmt.Errorf("load %q: %w", key, err))
 		}
 		if cp.Status == StepStatusComplete {
 			out = append(out, key)

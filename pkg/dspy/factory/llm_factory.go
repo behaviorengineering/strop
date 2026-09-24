@@ -61,7 +61,7 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	if apiSchema == "" {
 		return nil, fmt.Errorf("api_schema is required - must be explicitly set in configuration")
 	}
-	if provider.Thinking && apiSchema != "openai" {
+	if provider.Thinking && apiSchema != apiSchemaOpenAI {
 		return nil, fmt.Errorf("thinking mode currently requires an OpenAI-compatible provider")
 	}
 
@@ -76,7 +76,7 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	}
 
 	// For OpenAI-compatible providers (Perplexity, OpenRouter, etc.), configure baseURL and endpoint.
-	if apiSchema == "openai" && provider.BaseURL != "" {
+	if apiSchema == apiSchemaOpenAI && provider.BaseURL != "" {
 		providerConfig.BaseURL = provider.BaseURL
 		if providerConfig.Endpoint == nil {
 			providerConfig.Endpoint = &core.EndpointConfig{}
@@ -87,7 +87,7 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 		}
 		// Set HTTP client timeout (in seconds).
 		providerConfig.Endpoint.TimeoutSec = int(providerTimeout.Seconds())
-	} else if apiSchema == "google" {
+	} else if apiSchema == apiSchemaGoogle {
 		// For Google AI, configure endpoint timeout if endpoint exists.
 		if providerConfig.Endpoint == nil {
 			providerConfig.Endpoint = &core.EndpointConfig{}
@@ -117,11 +117,16 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	// llmInstance = core.NewModelContextDecorator(llmInstance) // ❌ DISABLED - causes empty modelID overwrite.
 
 	// Wrap with grounding wrapper if Google API and grounding is enabled
-	if apiSchema == "google" && provider.Grounding != nil {
+	if apiSchema == apiSchemaGoogle && provider.Grounding != nil {
 		// Extract base URL - use provider's baseURL or default
 		baseURL := provider.BaseURL
 		if baseURL == "" {
 			baseURL = "https://generativelanguage.googleapis.com"
+		}
+
+		var groundingClient *http.Client
+		if getter, ok := llmInstance.(httpClientGetter); ok {
+			groundingClient = getter.GetHTTPClient()
 		}
 
 		llmInstance = NewGroundingLLMWrapper(
@@ -131,36 +136,19 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 			baseURL,
 			string(modelID),
 			providerTimeout,
+			groundingClient,
 			f.logger,
 		)
 
 		if f.logger != nil {
 			f.logger.WithFields(map[string]interface{}{
-				"model":             string(modelID),
+				logFieldModel:       string(modelID),
 				"dynamic_threshold": provider.Grounding.DynamicThreshold,
 			}).Debug("Wrapped Gemini LLM with Google Search grounding")
 		}
 	}
 
-	// dspy-go OpenAILLM does not implement GenerateWithContent; wrap OpenAI-compatible
-	// providers so multimodal (image_url) requests reach proxies like Polypus.
-	if apiSchema == "openai" {
-		llmInstance = NewOpenAIVisionLLMWrapper(
-			llmInstance,
-			provider.APIKey,
-			provider.BaseURL,
-			string(modelID),
-			providerTimeout,
-			f.logger,
-		)
-
-		if f.logger != nil {
-			f.logger.WithFields(map[string]interface{}{
-				"model":    string(modelID),
-				"base_url": provider.BaseURL,
-			}).Debug("Wrapped OpenAI-compatible LLM with multimodal vision support")
-		}
-	}
+	// Multimodal GenerateWithContent is provided by dspy-go GeneratorLLM via llm-go.
 
 	// Wrap with output token limit wrapper if max_output_tokens is configured
 	if provider.MaxOutputTokens > 0 {
@@ -173,8 +161,8 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 
 		if f.logger != nil {
 			f.logger.WithFields(map[string]interface{}{
-				"model":             string(modelID),
-				"max_output_tokens": provider.MaxOutputTokens,
+				logFieldModel:           string(modelID),
+				logFieldMaxOutputTokens: provider.MaxOutputTokens,
 			}).Debug("Wrapped LLM with output token limit enforcement")
 		}
 	}
@@ -211,7 +199,7 @@ func (f *LLMFactory) instrumentLLMHTTPClient(llm core.LLM) {
 }
 
 func providerNameForTrace(apiSchema, baseURL string) string {
-	if apiSchema == "openai" && isPolypusBaseURL(baseURL) {
+	if apiSchema == apiSchemaOpenAI && isPolypusBaseURL(baseURL) {
 		return "polypus"
 	}
 	return apiSchema
@@ -244,7 +232,7 @@ func (d *loggingModelContextDecorator) Generate(ctx context.Context, prompt stri
 	// Debug: Log that decorator is being called (DEBUG level to reduce log noise).
 	if d.logger != nil {
 		d.logger.WithFields(map[string]interface{}{
-			"expected_model_id": d.expectedModelID,
+			logFieldExpectedModelID: d.expectedModelID,
 		}).Debug("🔧 loggingModelContextDecorator.Generate CALLED")
 	}
 
@@ -252,9 +240,9 @@ func (d *loggingModelContextDecorator) Generate(ctx context.Context, prompt stri
 	state := core.GetExecutionState(ctx)
 	if d.logger != nil {
 		d.logger.WithFields(map[string]interface{}{
-			"has_state":         state != nil,
-			"expected_model_id": d.expectedModelID,
-			"state_ptr":         fmt.Sprintf("%p", state),
+			"has_state":             state != nil,
+			logFieldExpectedModelID: d.expectedModelID,
+			"state_ptr":             fmt.Sprintf("%p", state),
 		}).Debug("🔧 loggingModelContextDecorator.Generate: checking state")
 	}
 
@@ -269,10 +257,10 @@ func (d *loggingModelContextDecorator) Generate(ctx context.Context, prompt stri
 			afterModelID := state.GetModelID()
 			if d.logger != nil {
 				d.logger.WithFields(map[string]interface{}{
-					"expected_model_id": d.expectedModelID,
-					"before_model_id":   beforeModelID,
-					"after_model_id":    afterModelID,
-					"mutation_worked":   afterModelID == d.expectedModelID,
+					logFieldExpectedModelID: d.expectedModelID,
+					"before_model_id":       beforeModelID,
+					"after_model_id":        afterModelID,
+					"mutation_worked":       afterModelID == d.expectedModelID,
 				}).Debug("🔧 loggingModelContextDecorator.Generate: SET model ID in ExecutionState")
 			}
 		} else if d.logger != nil {

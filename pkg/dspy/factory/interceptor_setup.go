@@ -166,7 +166,7 @@ func (s *InterceptorSetup) EnableStructuredOutput(module core.InterceptableModul
 	existingInterceptors := module.GetInterceptors()
 	if predict.IsXMLModeEnabled() && len(existingInterceptors) > 0 {
 		s.debugLogName(displayName, "XML mode enabled but interceptor should have been removed earlier", map[string]interface{}{
-			"interceptor_count": len(existingInterceptors),
+			logFieldInterceptorCount: len(existingInterceptors),
 		})
 	}
 
@@ -274,7 +274,7 @@ func (s *InterceptorSetup) enablePredictRawXMLPassthrough(module core.Intercepta
 	}
 	stripDSPyXMLInterceptor(module, alreadyEnabled)
 	s.debugLogName(interceptableDisplayName(module), "Enabled Predict raw XML passthrough for custom structured output parser", map[string]interface{}{
-		"interceptor_count":         len(module.GetInterceptors()),
+		logFieldInterceptorCount:    len(module.GetInterceptors()),
 		"predict_interceptor_count": len(predict.GetInterceptors()),
 	})
 }
@@ -326,7 +326,7 @@ func (s *InterceptorSetup) appendValidationInterceptor(
 
 	if s.logger != nil {
 		s.logger.WithFields(map[string]interface{}{
-			"module": interceptableDisplayName(module),
+			logFieldModule: interceptableDisplayName(module),
 		}).Debug("Validation interceptor added to module")
 	}
 }
@@ -337,7 +337,7 @@ func (s *InterceptorSetup) debugLogName(moduleName, message string, fields map[s
 		return
 	}
 	allFields := map[string]interface{}{
-		"module": moduleName,
+		logFieldModule: moduleName,
 	}
 	for k, v := range fields {
 		allFields[k] = v
@@ -447,9 +447,9 @@ func (s *InterceptorSetup) AddInterceptors(module core.InterceptableModule, prov
 
 		if s.logger != nil {
 			s.logger.WithFields(map[string]interface{}{
-				"module":     module.GetDisplayName(),
-				"model":      provider.Model,
-				"max_tokens": provider.MaxContextTokens,
+				logFieldModule: module.GetDisplayName(),
+				logFieldModel:  provider.Model,
+				"max_tokens":   provider.MaxContextTokens,
 			}).Debug("Input processing interceptor added to module")
 		}
 	}

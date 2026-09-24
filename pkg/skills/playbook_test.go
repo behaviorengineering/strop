@@ -21,7 +21,9 @@ func TestSelectBulletsCapsPolarityAndScope(t *testing.T) {
 	_, err = SelectBullets(bullets, BulletRequest{})
 	require.ErrorIs(t, err, ErrInvalid)
 
-	bad := append(bullets, Bullet{ID: "e", Scope: "conversation", Text: "tip", Polarity: "maybe"})
+	bad := make([]Bullet, len(bullets), len(bullets)+1)
+	copy(bad, bullets)
+	bad = append(bad, Bullet{ID: "e", Scope: "conversation", Text: "tip", Polarity: "maybe"})
 	_, err = SelectBullets(bad, BulletRequest{Scope: "conversation"})
 	require.ErrorIs(t, err, ErrInvalid)
 }

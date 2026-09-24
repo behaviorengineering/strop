@@ -1,0 +1,14 @@
+{
+  "source": "synthetic",
+  "operation": "Predict:strop_demo_generator",
+  "task": "strop_demo_generator",
+  "fields": {
+    "original_text": "The pipeline should fail closed on corrupt checkpoints.",
+    "iterationVersion": 1,
+    "retrieved_guides": ""
+  },
+  "recorded_outputs": {
+    "directives_ack": "1. Instructions: rewrite clearly.\n2. Objectives: keep meaning.",
+    "summary": "Corrupt checkpoints must surface errors instead of looking missing."
+  }
+}

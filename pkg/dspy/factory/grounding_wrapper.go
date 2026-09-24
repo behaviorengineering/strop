@@ -31,6 +31,7 @@ type GroundingLLMWrapper struct {
 }
 
 // NewGroundingLLMWrapper creates a new wrapper that adds Google Search grounding to Gemini LLM requests.
+// httpClient may be nil; when set it should be the factory-instrumented client from the wrapped LLM.
 func NewGroundingLLMWrapper(
 	wrapped core.LLM,
 	groundingConfig *stropdspy.GroundingConfig,
@@ -38,10 +39,21 @@ func NewGroundingLLMWrapper(
 	baseURL string,
 	modelID string,
 	timeout time.Duration,
+	httpClient *http.Client,
 	logger stroplog.Logger,
 ) *GroundingLLMWrapper {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout:   timeout,
+			Transport: http.DefaultTransport,
+		}
+	} else if httpClient.Timeout <= 0 {
+		cloned := *httpClient
+		cloned.Timeout = timeout
+		httpClient = &cloned
 	}
 	return &GroundingLLMWrapper{
 		LLM:             wrapped,
@@ -49,11 +61,8 @@ func NewGroundingLLMWrapper(
 		apiKey:          apiKey,
 		baseURL:         baseURL,
 		modelID:         modelID,
-		httpClient: &http.Client{
-			Timeout:   timeout,
-			Transport: http.DefaultTransport,
-		},
-		logger: logger,
+		httpClient:      httpClient,
+		logger:          logger,
 	}
 }
 
@@ -224,10 +233,12 @@ func (g *GroundingLLMWrapper) makeRequest(ctx context.Context, reqBody map[strin
 	}
 
 	if g.logger != nil {
+		endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", g.baseURL, g.modelID)
 		g.logger.WithFields(map[string]interface{}{
-			"model":    g.modelID,
-			"url":      url,
-			"has_tool": true,
+			logFieldModel: g.modelID,
+			"endpoint":    endpoint,
+			"has_api_key": strings.TrimSpace(g.apiKey) != "",
+			"has_tool":    true,
 		}).Debug("Making Gemini API request with Google Search grounding")
 	}
 
@@ -239,21 +250,45 @@ func (g *GroundingLLMWrapper) makeRequest(ctx context.Context, reqBody map[strin
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Execute request
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && g.logger != nil {
-			g.logger.WithError(closeErr).Warn("Failed to close response body")
+	const maxAttempts = 3
+	var resp *http.Response
+	var body []byte
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		attemptReq := req.Clone(ctx)
+		attemptReq.Body = io.NopCloser(bytes.NewReader(jsonData))
+		attemptReq.ContentLength = int64(len(jsonData))
+		resp, lastErr = g.httpClient.Do(attemptReq)
+		if lastErr != nil {
+			if attempt == maxAttempts || ctx.Err() != nil {
+				return nil, fmt.Errorf("failed to send request: %w", lastErr)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("failed to send request: %w", ctx.Err())
+			case <-time.After(time.Duration(attempt) * 200 * time.Millisecond):
+			}
+			continue
 		}
-	}()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		body, lastErr = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if lastErr != nil {
+			return nil, fmt.Errorf("failed to read response body: %w", lastErr)
+		}
+		if resp.StatusCode == http.StatusOK || (resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests) {
+			break
+		}
+		if attempt == maxAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("failed to send request: %w", ctx.Err())
+		case <-time.After(time.Duration(attempt) * 200 * time.Millisecond):
+		}
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("failed to send request: %w", lastErr)
 	}
 
 	if resp.StatusCode != http.StatusOK {

@@ -17,6 +17,11 @@ import (
 	"github.com/XiaoConstantine/dspy-go/pkg/interceptors"
 )
 
+const (
+	testFieldRepoID         = "repo_id"
+	testFieldReadmeSnapshot = "readme_snapshot"
+)
+
 // sees only __raw_response (no parsed fields), resulting in empty output.value.
 func TestXMLInterceptorIssue_ReplicatesProductionBug(t *testing.T) {
 	// Create a DirectivesCoT module (same as production generators).
@@ -415,12 +420,12 @@ func TestInterceptorSetup_RegisterMandatoryFieldsOverridesDefault(t *testing.T) 
 func TestInterceptorSetup_RegisterRequiredInputs(t *testing.T) {
 	t.Parallel()
 	setup := NewInterceptorSetup(InterceptorSetupConfig{})
-	setup.RegisterRequiredInputs("bootstrap_story", []string{"repo_id", "readme_snapshot"})
-	require.Equal(t, []string{"repo_id", "readme_snapshot"}, setup.requiredInputs["bootstrap_story"])
+	setup.RegisterRequiredInputs("bootstrap_story", []string{testFieldRepoID, testFieldReadmeSnapshot})
+	require.Equal(t, []string{testFieldRepoID, testFieldReadmeSnapshot}, setup.requiredInputs["bootstrap_story"])
 	proc := setup.composeInputProcessor("bootstrap_story", stropdspy.ProviderConfig{})
 	require.NotNil(t, proc)
-	err := proc(context.Background(), map[string]any{"repo_id": "x", "readme_snapshot": ""}, nil)
+	err := proc(context.Background(), map[string]any{testFieldRepoID: "x", testFieldReadmeSnapshot: ""}, nil)
 	require.Error(t, err)
-	err = proc(context.Background(), map[string]any{"repo_id": "x", "readme_snapshot": "hi"}, nil)
+	err = proc(context.Background(), map[string]any{testFieldRepoID: "x", testFieldReadmeSnapshot: "hi"}, nil)
 	require.NoError(t, err)
 }

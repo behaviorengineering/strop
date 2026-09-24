@@ -67,7 +67,7 @@ func testPhases() []PhaseDef {
 func TestFieldWalkStrategy_emptyThenAggregate(t *testing.T) {
 	t.Parallel()
 	runner := &fakeFieldRunner{t: t, failFirst: map[string]bool{"b": true}}
-	strat := NewFieldWalkStrategy(FieldWalkConfig{
+	strategy := NewFieldWalkStrategy(FieldWalkConfig{
 		Phases:          testPhases(),
 		MinPassScore:    7.0,
 		Runner:          runner,
@@ -76,7 +76,7 @@ func TestFieldWalkStrategy_emptyThenAggregate(t *testing.T) {
 		VersionFeedback: "outer-feedback",
 		Seed:            map[string]string{"b": "src-b", "c": "src-c"},
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -101,7 +101,7 @@ func TestFieldWalkStrategy_sourceTextFunc(t *testing.T) {
 	t.Parallel()
 	source := map[string]string{"a": "EN-a", "b": "EN-b", "c": "EN-c"}
 	runner := &fakeFieldRunner{t: t}
-	strat := NewFieldWalkStrategy(FieldWalkConfig{
+	strategy := NewFieldWalkStrategy(FieldWalkConfig{
 		Phases:         testPhases(),
 		MinPassScore:   7.0,
 		EmptyResultErr: fmt.Errorf("empty"),
@@ -112,7 +112,7 @@ func TestFieldWalkStrategy_sourceTextFunc(t *testing.T) {
 		},
 		Runner: runner,
 	})
-	result, err := RunCompositionLoop(context.Background(), strat, nil)
+	result, err := RunCompositionLoop(context.Background(), strategy, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, runner.calls, 3)

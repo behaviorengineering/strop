@@ -74,8 +74,8 @@ func (c *ModuleConfigurator) SetupModule(
 
 	if c.logger != nil {
 		c.logger.WithFields(map[string]interface{}{
-			"module":   errorPrefix,
-			"llm_type": fmt.Sprintf("%T", llmInstance),
+			logFieldModule: errorPrefix,
+			"llm_type":     fmt.Sprintf("%T", llmInstance),
 		}).Debug("🔧 Module setup: LLM type set on Predict.LLM")
 	}
 
@@ -100,9 +100,9 @@ func (c *ModuleConfigurator) SetupModule(
 	if c.interceptorSetup.logger != nil {
 		interceptors := interceptable.GetInterceptors()
 		c.interceptorSetup.logger.WithFields(map[string]interface{}{
-			"module":            errorPrefix,
-			"interceptor_count": len(interceptors),
-			"xml_enabled":       predict.IsXMLModeEnabled(),
+			logFieldModule:           errorPrefix,
+			logFieldInterceptorCount: len(interceptors),
+			"xml_enabled":            predict.IsXMLModeEnabled(),
 		}).Debug("Module setup complete - interceptors configured")
 	}
 

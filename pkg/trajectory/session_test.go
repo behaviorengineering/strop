@@ -247,3 +247,141 @@ func TestEvidenceMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("metadata=%v", ev.Metadata)
 	}
 }
+
+func TestRollbackToKeepsPriorSteps(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	id := trajectory.Identity{
+		Pipeline:          "pipeline",
+		Job:               "job",
+		EntityID:          "entity-rollback",
+		Version:           1,
+		DefinitionVersion: trajectory.DefinitionVersion,
+		SourceFingerprint: "src",
+	}
+	steps := []trajectory.StepSpec{
+		{ID: "hook", Goal: "hook"},
+		{ID: "middle", Goal: "middle"},
+		{ID: "end", Goal: "end"},
+	}
+	sess, err := trajectory.Open(ctx, trajectory.OpenOptions{Root: root, ID: id, Steps: steps})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]string{"ok": "1"})
+	for _, stepID := range []string{"hook", "middle", "end"} {
+		if err := sess.SaveCompleteEvidence(ctx, stepID, trajectory.Evidence{Output: raw, Score: 8}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sess.RollbackTo(ctx, "middle"); err != nil {
+		t.Fatal(err)
+	}
+	if !sess.IsStepComplete(ctx, "hook") {
+		t.Fatal("hook should remain complete")
+	}
+	if sess.IsStepComplete(ctx, "middle") {
+		t.Fatal("middle should be invalidated")
+	}
+	if sess.IsStepComplete(ctx, "end") {
+		t.Fatal("end should be invalidated")
+	}
+	if sess.ResumedFrom != "middle" {
+		t.Fatalf("resumed_from=%q", sess.ResumedFrom)
+	}
+	last, ok := sess.LastCompletedStep(ctx)
+	if !ok || last != "hook" {
+		t.Fatalf("last=%q ok=%v", last, ok)
+	}
+	done, err := sess.CompletedSteps(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(done) != 1 || done[0] != "hook" {
+		t.Fatalf("completed=%v", done)
+	}
+	sums, err := sess.StepSummaries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sums) != 3 {
+		t.Fatalf("summaries=%d", len(sums))
+	}
+	if sums[0].Status != "complete" || sums[0].Score != 8 {
+		t.Fatalf("hook summary=%+v", sums[0])
+	}
+	if sums[1].Status != "incomplete" || sums[2].Status != "incomplete" {
+		t.Fatalf("summaries=%+v", sums)
+	}
+}
+
+func TestInvalidateFromStepPreservesPriorOnFingerprintChange(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	id := trajectory.Identity{
+		Pipeline:          "pipeline",
+		Job:               "job",
+		EntityID:          "entity-partial-fp",
+		Version:           1,
+		DefinitionVersion: trajectory.DefinitionVersion,
+		SourceFingerprint: "old",
+	}
+	steps := []trajectory.StepSpec{
+		{ID: "hook", Goal: "hook"},
+		{ID: "fork", Goal: "fork"},
+		{ID: "end", Goal: "end"},
+	}
+	sess, err := trajectory.Open(ctx, trajectory.OpenOptions{Root: root, ID: id, Steps: steps})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]string{"ok": "1"})
+	for _, stepID := range []string{"hook", "fork"} {
+		if err := sess.SaveCompleteEvidence(ctx, stepID, trajectory.Evidence{Output: raw, Score: 9}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id.SourceFingerprint = "new"
+	sess2, err := trajectory.Open(ctx, trajectory.OpenOptions{
+		Root:               root,
+		ID:                 id,
+		Steps:              steps,
+		InvalidateFromStep: "fork",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sess2.IsStepComplete(ctx, "hook") {
+		t.Fatal("hook should survive fingerprint change when InvalidateFromStep=fork")
+	}
+	if sess2.IsStepComplete(ctx, "fork") {
+		t.Fatal("fork should be invalidated")
+	}
+	if sess2.ResumedFrom != "fork" {
+		t.Fatalf("resumed_from=%q", sess2.ResumedFrom)
+	}
+}
+
+func TestRollbackToUnknownStepFails(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	root := t.TempDir()
+	id := trajectory.Identity{
+		Pipeline:          "pipeline",
+		Job:               "job",
+		EntityID:          "entity-unknown",
+		Version:           1,
+		DefinitionVersion: trajectory.DefinitionVersion,
+		SourceFingerprint: "src",
+	}
+	steps := []trajectory.StepSpec{{ID: "hook", Goal: "hook"}}
+	sess, err := trajectory.Open(ctx, trajectory.OpenOptions{Root: root, ID: id, Steps: steps})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.RollbackTo(ctx, "missing"); err == nil {
+		t.Fatal("expected unknown step error")
+	}
+}
