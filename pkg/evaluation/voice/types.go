@@ -25,6 +25,8 @@ type Profile struct {
 	RequiredVerbs  []string
 	MaxStaccatoRun int
 	ToneNotes      string
+	// Example is optional sample prose the generator may match for cadence.
+	Example string
 }
 
 // Violation is one deterministic miss.
