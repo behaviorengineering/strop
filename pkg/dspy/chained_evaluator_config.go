@@ -5,6 +5,7 @@ import (
 
 	"github.com/behaviorengineering/strop/pkg/evaluation"
 	"github.com/behaviorengineering/strop/pkg/evaluation/criteria"
+	"github.com/behaviorengineering/strop/pkg/evaluation/scoring"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 )
@@ -22,6 +23,8 @@ type ChainedEvaluatorConfig struct {
 	RolePrompts  map[evaluation.EvaluatorKey]ChainedEvaluatorRolePrompts
 	Persona      string                 // Optional: how the evaluator should behave; rendered first in both feedback and score when non-empty
 	CriterionIDs []criteria.CriterionID // Optional; used by workflows for role-to-criteria mapping. Can be nil.
+	// ScoreBackendFactory optionally replaces the LLM score step for matching roles (e.g. JEV). Nil keeps LLM scoring.
+	ScoreBackendFactory func(role evaluation.EvaluatorKey, criterionIDs []criteria.CriterionID, scorePrompt string) (scoring.Backend, error)
 }
 
 // CreateChainedModulesFromConfig builds a chained evaluator module for each role in config.RolePrompts.
@@ -38,13 +41,23 @@ func CreateChainedModulesFromConfig(
 	}
 	out := make(map[evaluation.EvaluatorKey]core.Module, len(config.RolePrompts))
 	for role, prompts := range config.RolePrompts {
-		mod, err := CreateChainedEvaluatorModule(
+		criterionIDs := criteria.ParseCriterionIDsFromMappingPrompt(prompts.ScoreGenerationPrompt)
+		var scoreBackend scoring.Backend
+		if config.ScoreBackendFactory != nil {
+			backend, factoryErr := config.ScoreBackendFactory(role, criterionIDs, prompts.ScoreGenerationPrompt)
+			if factoryErr != nil {
+				return nil, fmt.Errorf("create score backend for role %q: %w", role, factoryErr)
+			}
+			scoreBackend = backend
+		}
+		mod, err := CreateChainedEvaluatorModuleWithScoreBackend(
 			config.Signature,
 			role.String(),
 			prompts.FeedbackAnalysisPrompt,
 			prompts.ScoreGenerationPrompt,
 			config.Persona,
 			formatter,
+			scoreBackend,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create chained evaluator for role %q: %w", role, err)
