@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"fmt"
+
 	stroplog "github.com/behaviorengineering/strop/pkg/log"
 
 	stropdspy "github.com/behaviorengineering/strop/pkg/dspy"
@@ -127,8 +128,11 @@ func (c *ModuleConfigurator) SetupChainedModule(
 			return err
 		}
 
-		if err := c.SetupModule(ctx, provider, cm.GetScoreGenerationModule(), errorPrefix+" - Score Generation"); err != nil {
-			return err
+		scoreModule := cm.GetScoreGenerationModule()
+		if scoreModule != nil {
+			if err := c.SetupModule(ctx, provider, scoreModule, errorPrefix+" - Score Generation"); err != nil {
+				return err
+			}
 		}
 		return nil
 	}

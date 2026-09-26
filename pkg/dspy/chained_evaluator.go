@@ -6,6 +6,7 @@ import (
 
 	dspymodules "github.com/behaviorengineering/strop/pkg/dspy/modules"
 	"github.com/behaviorengineering/strop/pkg/evaluation/criteria"
+	"github.com/behaviorengineering/strop/pkg/evaluation/scoring"
 	"github.com/behaviorengineering/strop/pkg/streaming"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
@@ -205,9 +206,11 @@ func CreateDefaultConsolidatorModule(roleName string, systemPrompt string, perso
 // It implements core.Module and is used by both sayings and YouTube pipelines.
 type ChainedEvaluatorModule struct {
 	feedbackAnalysisModule *dspymodules.DirectivesCoT
-	scoreGenerationModule  *dspymodules.DirectivesCoT
+	scoreBackend           scoring.Backend
 	name                   string
 	signature              core.Signature
+	scoreCriterionIDs      []criteria.CriterionID
+	scoreGenerationPrompt  string
 }
 
 // CreateChainedEvaluatorModule creates a chained evaluator (feedback analysis -> score generation).
@@ -220,6 +223,32 @@ func CreateChainedEvaluatorModule(
 	scoreGenerationPrompt string,
 	persona string,
 	formatSignature EvaluatorSignatureFormatter,
+) (*ChainedEvaluatorModule, error) {
+	return createChainedEvaluatorModule(signature, roleName, feedbackAnalysisPrompt, scoreGenerationPrompt, persona, formatSignature, nil)
+}
+
+// CreateChainedEvaluatorModuleWithScoreBackend is like CreateChainedEvaluatorModule but injects a custom score backend (e.g. JEV).
+// When scoreBackend is nil, the default LLM score module is used.
+func CreateChainedEvaluatorModuleWithScoreBackend(
+	signature core.Signature,
+	roleName string,
+	feedbackAnalysisPrompt string,
+	scoreGenerationPrompt string,
+	persona string,
+	formatSignature EvaluatorSignatureFormatter,
+	scoreBackend scoring.Backend,
+) (*ChainedEvaluatorModule, error) {
+	return createChainedEvaluatorModule(signature, roleName, feedbackAnalysisPrompt, scoreGenerationPrompt, persona, formatSignature, scoreBackend)
+}
+
+func createChainedEvaluatorModule(
+	signature core.Signature,
+	roleName string,
+	feedbackAnalysisPrompt string,
+	scoreGenerationPrompt string,
+	persona string,
+	formatSignature EvaluatorSignatureFormatter,
+	scoreBackend scoring.Backend,
 ) (*ChainedEvaluatorModule, error) {
 	evalField := func(name, desc string) core.Field {
 		return core.NewField(name, core.WithNoPrefix(), core.WithDescription(desc))
@@ -248,36 +277,36 @@ func CreateChainedEvaluatorModule(
 
 	feedbackAnalysisModule := dspymodules.New(feedbackAnalysisSignature, dspymodules.Config{Name: roleName + " - Feedback Analysis"})
 
-	scoreInstruction := scoreGenerationPrompt
-	if persona != "" {
-		scoreInstruction = persona + "\n\n" + scoreInstruction
-	}
-	// Score generation: original inputs + feedback; task output is criterion_scores only (+ directives_ack).
-	scoreGenerationInputs := make([]core.InputField, len(signature.Inputs))
-	copy(scoreGenerationInputs, signature.Inputs)
-	scoreGenerationInputs = append(scoreGenerationInputs, core.InputField{
-		Field: evalField("feedback", "Feedback from the feedback analysis module - use this to determine scores"),
-	})
-
 	scoreCriterionIDs := criteria.ParseCriterionIDsFromMappingPrompt(scoreGenerationPrompt)
-	scoreCriterionScoresDesc := criteria.CriterionScoresOutputDescription(scoreCriterionIDs)
 
-	scoreGenerationSignature := core.NewSignature(
-		scoreGenerationInputs,
-		[]core.OutputField{
-			{Field: evalField("criterion_scores", scoreCriterionScoresDesc)},
-		},
-	)
-	scoreGenerationSignature = scoreGenerationSignature.WithInstruction(scoreInstruction)
-	scoreGenerationSignature = WithXMLFormatting(scoreGenerationSignature)
-	if formatSignature != nil {
-		scoreGenerationSignature = formatSignature(scoreGenerationSignature)
+	if scoreBackend == nil {
+		scoreInstruction := scoreGenerationPrompt
+		if persona != "" {
+			scoreInstruction = persona + "\n\n" + scoreInstruction
+		}
+		scoreGenerationInputs := make([]core.InputField, len(signature.Inputs))
+		copy(scoreGenerationInputs, signature.Inputs)
+		scoreGenerationInputs = append(scoreGenerationInputs, core.InputField{
+			Field: evalField("feedback", "Feedback from the feedback analysis module - use this to determine scores"),
+		})
+		scoreCriterionScoresDesc := criteria.CriterionScoresOutputDescription(scoreCriterionIDs)
+		scoreGenerationSignature := core.NewSignature(
+			scoreGenerationInputs,
+			[]core.OutputField{
+				{Field: evalField("criterion_scores", scoreCriterionScoresDesc)},
+			},
+		)
+		scoreGenerationSignature = scoreGenerationSignature.WithInstruction(scoreInstruction)
+		scoreGenerationSignature = WithXMLFormatting(scoreGenerationSignature)
+		if formatSignature != nil {
+			scoreGenerationSignature = formatSignature(scoreGenerationSignature)
+		}
+		scoreGenerationSignature = scoreGenerationSignature.WithInstruction(
+			scoreGenerationSignature.Instruction + SharedInstructions.ChainedEvaluatorRationaleCap,
+		)
+		scoreGenerationModule := dspymodules.New(scoreGenerationSignature, dspymodules.Config{Name: roleName + " - Score Generation"})
+		scoreBackend = NewLLMScoreBackend(scoreGenerationModule)
 	}
-	scoreGenerationSignature = scoreGenerationSignature.WithInstruction(
-		scoreGenerationSignature.Instruction + SharedInstructions.ChainedEvaluatorRationaleCap,
-	)
-
-	scoreGenerationModule := dspymodules.New(scoreGenerationSignature, dspymodules.Config{Name: roleName + " - Score Generation"})
 
 	combinedSignature := core.NewSignature(
 		signature.Inputs,
@@ -290,9 +319,11 @@ func CreateChainedEvaluatorModule(
 
 	return &ChainedEvaluatorModule{
 		feedbackAnalysisModule: feedbackAnalysisModule,
-		scoreGenerationModule:  scoreGenerationModule,
+		scoreBackend:           scoreBackend,
 		name:                   roleName,
 		signature:              combinedSignature,
+		scoreCriterionIDs:      scoreCriterionIDs,
+		scoreGenerationPrompt:  scoreGenerationPrompt,
 	}, nil
 }
 
@@ -328,52 +359,54 @@ func (c *ChainedEvaluatorModule) Process(ctx context.Context, inputs map[string]
 		return nil, fmt.Errorf("feedback analysis missing directives_ack: %w", err)
 	}
 
-	scoreInputs := make(map[string]interface{})
-	for k, v := range inputs {
-		scoreInputs[k] = v
-	}
-	scoreInputs["feedback"] = feedback
-
 	emitEvaluatorStage(ctx, c.name, "scoring")
-	scoreResult, err := c.scoreGenerationModule.Process(ctx, scoreInputs, opts...)
+	scoreReq := scoring.ScoreRequest{
+		GeneratorInput:  toAnyMap(inputs[FieldGeneratorInput]),
+		GeneratorOutput: toAnyMap(inputs[FieldGeneratorOutput]),
+		Feedback:        feedback,
+		CriterionIDs:    c.scoreCriterionIDs,
+		ScorePrompt:     c.scoreGenerationPrompt,
+		ModuleOptions:   opts,
+	}
+	generated, err := c.scoreBackend.Generate(ctx, scoreReq)
 	if err != nil {
 		return nil, fmt.Errorf("score generation failed: %w", err)
 	}
-	if len(scoreResult) == 0 {
-		return nil, fmt.Errorf("score generation returned empty result")
-	}
-
-	criterionScoresValue, exists := scoreResult["criterion_scores"]
-	if !exists {
-		availableFields := make([]string, 0, len(scoreResult))
-		for k := range scoreResult {
-			availableFields = append(availableFields, k)
-		}
-		return nil, fmt.Errorf("criterion_scores field is missing in score generation result (available fields: %v)", availableFields)
-	}
-	criterionScores, err := CoerceCriterionScoresMap(criterionScoresValue)
-	if err != nil {
-		availableFields := make([]string, 0, len(scoreResult))
-		for k := range scoreResult {
-			availableFields = append(availableFields, k)
-		}
-		return nil, fmt.Errorf("criterion_scores field is missing or invalid in score generation result (available fields: %v): %w", availableFields, err)
-	}
-	if len(criterionScores) == 0 {
+	if len(generated.CriterionScores) == 0 {
 		return nil, fmt.Errorf("criterion_scores map is empty in score generation result — model must emit one XML child tag per criterion ID with numeric scores")
 	}
 
-	scoringAck, err := ExtractRequiredReasoningField(scoreResult)
-	if err != nil {
-		return nil, fmt.Errorf("score generation missing directives_ack: %w", err)
+	criterionScores := make(map[string]interface{}, len(generated.CriterionScores))
+	for k, v := range generated.CriterionScores {
+		criterionScores[k] = v
 	}
-	combinedAck := analysisAck + "\n\n" + scoringAck
+	if generated.DirectivesAck == "" {
+		return nil, fmt.Errorf("score generation missing directives_ack")
+	}
+	combinedAck := analysisAck + "\n\n" + generated.DirectivesAck
 
 	return map[string]interface{}{
 		"feedback":         feedback,
 		"criterion_scores": criterionScores,
 		FieldDirectivesAck: combinedAck,
 	}, nil
+}
+
+func toAnyMap(value interface{}) map[string]any {
+	if value == nil {
+		return nil
+	}
+	if m, ok := value.(map[string]any); ok {
+		return m
+	}
+	if m, ok := value.(map[string]interface{}); ok {
+		out := make(map[string]any, len(m))
+		for k, v := range m {
+			out[k] = v
+		}
+		return out
+	}
+	return nil
 }
 
 func emitEvaluatorStage(ctx context.Context, roleName, stage string) {
@@ -388,13 +421,21 @@ func (c *ChainedEvaluatorModule) GetInterceptors() []core.ModuleInterceptor {
 // SetInterceptors sets interceptors on both modules.
 func (c *ChainedEvaluatorModule) SetInterceptors(interceptors []core.ModuleInterceptor) {
 	c.feedbackAnalysisModule.SetInterceptors(interceptors)
-	c.scoreGenerationModule.SetInterceptors(interceptors)
+	if scoreModule := c.GetScoreGenerationModule(); scoreModule != nil {
+		if interceptable, err := dspymodules.AsInterceptable(scoreModule); err == nil {
+			interceptable.SetInterceptors(interceptors)
+		}
+	}
 }
 
 // SetLLM sets LLM on both modules.
 func (c *ChainedEvaluatorModule) SetLLM(llm core.LLM) {
 	c.feedbackAnalysisModule.SetLLM(llm)
-	c.scoreGenerationModule.SetLLM(llm)
+	if scoreModule := c.GetScoreGenerationModule(); scoreModule != nil {
+		if cot, ok := scoreModule.(*dspymodules.DirectivesCoT); ok {
+			cot.SetLLM(llm)
+		}
+	}
 }
 
 // WithName sets the module name.
@@ -409,8 +450,23 @@ func (c *ChainedEvaluatorModule) GetFeedbackAnalysisModule() core.Module {
 }
 
 // GetScoreGenerationModule returns the score generation module (for setup).
+// Returns nil when the score backend is not LLM-based (e.g. JEV).
 func (c *ChainedEvaluatorModule) GetScoreGenerationModule() core.Module {
-	return c.scoreGenerationModule
+	if c == nil || c.scoreBackend == nil {
+		return nil
+	}
+	if provider, ok := c.scoreBackend.(scoring.ScoreModuleProvider); ok {
+		return provider.ScoreModule()
+	}
+	return nil
+}
+
+// GetScoreBackend returns the configured score backend.
+func (c *ChainedEvaluatorModule) GetScoreBackend() scoring.Backend {
+	if c == nil {
+		return nil
+	}
+	return c.scoreBackend
 }
 
 // Clone returns a deep copy of the chained module.
@@ -419,16 +475,27 @@ func (c *ChainedEvaluatorModule) Clone() core.Module {
 	if !ok {
 		panic("ChainedEvaluatorModule: feedback analysis Clone() returned unexpected type")
 	}
-	clonedScore, ok := c.scoreGenerationModule.Clone().(*dspymodules.DirectivesCoT)
-	if !ok {
-		panic("ChainedEvaluatorModule: score generation Clone() returned unexpected type")
-	}
-	return &ChainedEvaluatorModule{
+	cloned := &ChainedEvaluatorModule{
 		feedbackAnalysisModule: clonedFeedback,
-		scoreGenerationModule:  clonedScore,
 		name:                   c.name,
 		signature:              c.signature,
+		scoreCriterionIDs:      c.scoreCriterionIDs,
+		scoreGenerationPrompt:  c.scoreGenerationPrompt,
 	}
+	if provider, ok := c.scoreBackend.(scoring.ScoreModuleProvider); ok {
+		if scoreModule := provider.ScoreModule(); scoreModule != nil {
+			clonedScore, ok := scoreModule.Clone().(*dspymodules.DirectivesCoT)
+			if !ok {
+				panic("ChainedEvaluatorModule: score generation Clone() returned unexpected type")
+			}
+			cloned.scoreBackend = NewLLMScoreBackend(clonedScore)
+		} else {
+			cloned.scoreBackend = c.scoreBackend
+		}
+	} else {
+		cloned.scoreBackend = c.scoreBackend
+	}
+	return cloned
 }
 
 // GetDisplayName returns the display name.
