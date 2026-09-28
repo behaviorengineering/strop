@@ -30,6 +30,12 @@
 // records module Process errors. Host owns NewManager/Close for the session. ACE is not
 // runreport and not humanreview.CompositionLearning (few-shot demos). RLM Complete is a later edge.
 //
+// Pipeline trajectory (optional): WithPipelineTrajectory attaches a PipelineTrajectory for ops
+// and agent resume. RunCompositionLoop and RunStepPlan append PipelineAttempt records with
+// FailureClass (transient_infra vs semantic_gate). ClassifyFailure guides mechanical retry vs
+// PhaseCompensator; never use PlanRepair for transient_infra. ACE RecorderFromContext receives
+// mirrored steps when both are on ctx.
+//
 // Pipelines implement RefinementStrategy and call RunRefinementLoop instead of duplicating the recursive loop.
 // CompositionStrategy may nest inside each refinement version.
 //

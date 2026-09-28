@@ -52,6 +52,17 @@ description: >-
 **Ambient ACE (optional):** Host `ace.NewManager` (entity+job + context-keyed `LearningsPath`) → `ace.WithManager` on golang ctx for the session → `Close` at session end. Loops credit via Start/EndTrajectory; `JobRunner` injects `LearningsContext` into `retrieved_guides`. Playbook is session-scoped on that ctx, not a global default file. Not `humanreview.LearningService` demos. RLM Complete is a later edge.
 **Phase compensation:** Optional `PhaseCompensator` on a `CompositionStrategy`. After `MaxAttempts` fail, the loop collects evidence, runs plan inference, then apply+re-gate. Return `CompensateAttempts == 0` to skip. Do not reuse `HealingStrategy` for phase exhaust.
 
+**Pipeline trajectory (ops + agents):** Attach `orchestration.WithPipelineTrajectory(ctx, orchestration.NewPipelineTrajectory(entityID, job))` for the pipeline session. `RunCompositionLoop` and `RunStepPlan` append `PipelineAttempt` records with `FailureClass` (`ClassifyFailure` for errors; gate fail = `semantic_gate`). On resume, read `TrajectoryFromContext` or `Snapshot()` before re-running; do not invent a second recovery log in the host.
+
+| FailureClass | Agent action |
+| --- | --- |
+| `transient_infra` | Mechanical pace/retry/backoff only; MUST NOT call `PlanRepair` |
+| `semantic_gate` | Normal retries then `PhaseCompensator` when implemented |
+| `hard` | Fix config/data; fail closed |
+| `cancelled` | Stop; user or ctx cancelled |
+
+When ACE is also on ctx, pipeline attempts mirror into `ace.RecorderFromContext` for playbook credit.
+
 **Early exit:** Successful early exit MUST return a concrete selected ID — never `uuid.Nil`. Fallback order: pending → approved → any existing record.
 
 ---

@@ -214,6 +214,14 @@ func runOneStep(
 		out, runErr := runPlanStep(ctx, runner, plan, step)
 		if runErr != nil {
 			lastErr = fmt.Errorf("orchestration: step %q: %w", step.ID, runErr)
+			RecordPipelineAttempt(ctx, PipelineAttempt{
+				Scope:        stepPlanScope(plan.ID, step.ID),
+				Action:       "step_run",
+				Attempt:      attempt,
+				FailureClass: ClassifyFailure(runErr),
+				Passed:       false,
+				Err:          truncateFeedback(runErr.Error(), 400),
+			})
 			if !retryAfterError(ctx, lastErr, attempt, maxAttempts, classify, sleep, eventChan, plan.ID, step.ID) {
 				return false, attempts, persistFailed(ctx, store, plan.ID, step, lastErr)
 			}
@@ -245,6 +253,12 @@ func runOneStep(
 		if c := runreport.CollectorFromContext(ctx); c != nil {
 			c.RecordPhase(step.ID, attempt, true, 0, "")
 		}
+		RecordPipelineAttempt(ctx, PipelineAttempt{
+			Scope:  stepPlanScope(plan.ID, step.ID),
+			Action: "step_run",
+			Attempt: attempt,
+			Passed: true,
+		})
 		sendStepPlanEvent(eventChan, fmt.Sprintf("Step plan %s completed %s", plan.ID, step.ID))
 		return true, attempts, nil
 	}
