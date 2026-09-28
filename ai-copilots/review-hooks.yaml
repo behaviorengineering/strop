@@ -1,0 +1,33 @@
+library: github.com/behaviorengineering/strop
+
+in_scope:
+  import_prefixes:
+    - github.com/behaviorengineering/strop/
+  path_globs:
+    - "**/orchestration/**"
+    - "**/pkg/dspy/**"
+    - "**/digest/**"
+
+stage5_skills:
+  - inference-pace
+  - strop-orchestration
+
+mechanical_stages:
+  - id: strop-M1
+    title: Strop module and orchestration tests
+    skill: strop-pipeline-pattern
+    tool_slots:
+      - name: strop_pkg_test
+        prefer: make test
+        fallback: go test ./...
+
+consultant_briefs:
+  - stage: A
+    skill: strop-orchestration
+    when: Code uses composition walks, JobRunner chains, or refinement loops
+  - stage: B
+    skill: inference-pace
+    when: Batch LLM jobs, parallel inspectors, or provider throttle handling
+  - stage: C
+    skill: strop-pipeline-pattern
+    when: Generators or evaluators should be isolatable without full pipeline

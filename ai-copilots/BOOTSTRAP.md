@@ -42,7 +42,10 @@ ai-copilots/
     strop-pipeline-pattern/SKILL.md
     strop-orchestration/SKILL.md
     strop-human-review/SKILL.md
+    inference-pace/SKILL.md
 ```
+
+`ai-copilots/review-hooks.yaml` is the staged-review manifest; hosts discover it via soft-linked skills (see cursor-packs `review-code-staged`).
 
 ---
 
@@ -61,6 +64,7 @@ ai-copilots/
 | `strop-pipeline-pattern` | `ai-copilots/skills/strop-pipeline-pattern/` |
 | `strop-orchestration` | `ai-copilots/skills/strop-orchestration/` |
 | `strop-human-review` | `ai-copilots/skills/strop-human-review/` |
+| `inference-pace` | `ai-copilots/skills/inference-pace/` |
 
 | IDE | Skills |
 |-----|--------|
@@ -69,14 +73,34 @@ ai-copilots/
 | Claude Code | `.claude/skills/**/SKILL.md` |
 | Codex | `.codex/skills/**/SKILL.md` |
 
+**Collision-safe link** (MUST use for every skill name; never replace cursor-packs-owned skills):
+
+```bash
+link_strop_skill() {
+  local name="$1" rel="$2"
+  local dest=".cursor/skills/$name"
+  local target="$MOD/$rel"
+  mkdir -p .cursor/skills
+  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+    echo "refuse: $dest exists and is not a symlink"; return 1
+  fi
+  if [ -L "$dest" ]; then
+    current="$(readlink "$dest")"
+    case "$current" in *packs/shared*|*cursor-packs*) echo "refuse: $dest is pack-owned ($current)"; return 1 ;; esac
+    if [ "$current" = "$target" ]; then ln -snf "$target" "$dest"; return 0; fi
+  fi
+  ln -snf "$target" "$dest"
+}
+```
+
 **Cursor (macOS/Linux)** from host workspace root:
 
 ```bash
 MOD="$(go list -m -f '{{.Dir}}' github.com/behaviorengineering/strop)"
-mkdir -p .cursor/skills
-ln -snf "$MOD/ai-copilots/skills/strop-pipeline-pattern" .cursor/skills/strop-pipeline-pattern
-ln -snf "$MOD/ai-copilots/skills/strop-orchestration" .cursor/skills/strop-orchestration
-ln -snf "$MOD/ai-copilots/skills/strop-human-review" .cursor/skills/strop-human-review
+link_strop_skill strop-pipeline-pattern ai-copilots/skills/strop-pipeline-pattern
+link_strop_skill strop-orchestration ai-copilots/skills/strop-orchestration
+link_strop_skill strop-human-review ai-copilots/skills/strop-human-review
+link_strop_skill inference-pace ai-copilots/skills/inference-pace
 ```
 
 When the workspace root is this module:
@@ -86,6 +110,7 @@ mkdir -p .cursor/skills
 ln -snf ../ai-copilots/skills/strop-pipeline-pattern .cursor/skills/strop-pipeline-pattern
 ln -snf ../ai-copilots/skills/strop-orchestration .cursor/skills/strop-orchestration
 ln -snf ../ai-copilots/skills/strop-human-review .cursor/skills/strop-human-review
+ln -snf ../ai-copilots/skills/inference-pace .cursor/skills/inference-pace
 ```
 
 **Windows:** junction or developer-mode symlink; copy only with user approval.

@@ -7,6 +7,7 @@ Portable instructions for agents that build on this library. Canonical path is t
 | [strop-pipeline-pattern/SKILL.md](strop-pipeline-pattern/SKILL.md) | Adding a pipeline or job, JobRunner clients/modules, evaluators |
 | [strop-orchestration/SKILL.md](strop-orchestration/SKILL.md) | Refinement loops, composition walks, regenerate / max-versions |
 | [strop-human-review/SKILL.md](strop-human-review/SKILL.md) | Gate, reviewflow ports, reject-and-regenerate |
+| [inference-pace/SKILL.md](inference-pace/SKILL.md) | Batch LLM admit gate, AIMD, `transient_infra` mechanical recovery |
 
 Wire discovery: [../BOOTSTRAP.md](../BOOTSTRAP.md). Entry: [../../AGENTS.md](../../AGENTS.md). Human pitch: [../../README.md](../../README.md).
 

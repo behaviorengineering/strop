@@ -56,7 +56,7 @@ description: >-
 
 | FailureClass | Agent action |
 | --- | --- |
-| `transient_infra` | Mechanical pace/retry/backoff only; MUST NOT call `PlanRepair` |
+| `transient_infra` | Mechanical pace/retry/backoff only; MUST follow `.cursor/skills/inference-pace/SKILL.md` (gate + `core.LLM` decorator); MUST NOT call `PlanRepair` |
 | `semantic_gate` | Normal retries then `PhaseCompensator` when implemented |
 | `hard` | Fix config/data; fail closed |
 | `cancelled` | Stop; user or ctx cancelled |
