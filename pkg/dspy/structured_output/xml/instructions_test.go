@@ -256,4 +256,34 @@ func TestRepairUnclosedCDATA(t *testing.T) {
 	if repairUnclosedCDATA(already) != already {
 		t.Fatalf("must leave well-formed CDATA unchanged")
 	}
+	truncated := `<item><![CDATA[story_system_handles]]</item>`
+	gotTrunc := repairUnclosedCDATA(truncated)
+	wantTrunc := `<item><![CDATA[story_system_handles]]></item>`
+	if gotTrunc != wantTrunc {
+		t.Fatalf("truncated ]] closer:\nwant %#v\ngot  %#v", wantTrunc, gotTrunc)
+	}
+}
+
+func TestParseXML_ShortlistID_TruncatedCDATACloser(t *testing.T) {
+	p := NewXMLParser()
+	sig := core.NewSignature(nil, []core.OutputField{
+		{Field: core.NewField("shortlist_ids", core.WithDescription("XML array (list of items): repeat <item> under <shortlist_ids>."))},
+	})
+	cfg := testXMLConfig()
+	raw := `<response>
+<shortlist_ids>
+<item><![CDATA[story_system_handles]]</item>
+</shortlist_ids>
+</response>`
+	fields, err := p.parseXML(raw, sig, cfg)
+	if err != nil {
+		t.Fatalf("parseXML: %v", err)
+	}
+	items, ok := fields["shortlist_ids"].([]interface{})
+	if !ok || len(items) != 1 {
+		t.Fatalf("expected one shortlist_id, got %#v", fields["shortlist_ids"])
+	}
+	if items[0] != "story_system_handles" {
+		t.Fatalf("expected clean id, got %q", items[0])
+	}
 }

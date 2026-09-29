@@ -436,6 +436,21 @@ func isSelfClosingXMLTag(tag string) bool {
 	return strings.HasSuffix(t, "/")
 }
 
+// cdataCloseSuffixForBody returns the bytes to append so an unclosed CDATA section terminates
+// before the next tag or EOF. When the model emitted a truncated closer (value]]</tag>), append
+// only ">" instead of "]]>" so the body does not retain a stray "]]".
+func cdataCloseSuffixForBody(body string) string {
+	const fullClose = "]]>"
+	trimmed := strings.TrimRight(body, " \t\n\r")
+	if strings.HasSuffix(trimmed, fullClose) {
+		return ""
+	}
+	if strings.HasSuffix(trimmed, "]]") {
+		return ">"
+	}
+	return fullClose
+}
+
 // repairUnclosedCDATA inserts ]]> before the next </tag> (or at EOF) when the model opened
 // <![CDATA[ but omitted the closer. This is common on numeric score leaves.
 func repairUnclosedCDATA(xmlContent string) string {
@@ -462,13 +477,14 @@ func repairUnclosedCDATA(xmlContent string) string {
 			continue
 		}
 		if k >= 0 {
-			b.WriteString(remaining[:k])
-			b.WriteString(close)
+			body := remaining[:k]
+			b.WriteString(body)
+			b.WriteString(cdataCloseSuffixForBody(body))
 			remaining = remaining[k:]
 			continue
 		}
 		b.WriteString(remaining)
-		b.WriteString(close)
+		b.WriteString(cdataCloseSuffixForBody(remaining))
 		remaining = ""
 	}
 	return b.String()
