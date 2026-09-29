@@ -8,6 +8,7 @@ Portable instructions for agents that build on this library. Canonical path is t
 | [strop-orchestration/SKILL.md](strop-orchestration/SKILL.md) | Refinement loops, composition walks, regenerate / max-versions |
 | [strop-human-review/SKILL.md](strop-human-review/SKILL.md) | Gate, reviewflow ports, reject-and-regenerate |
 | [inference-pace/SKILL.md](inference-pace/SKILL.md) | Batch LLM admit gate, AIMD, `transient_infra` mechanical recovery |
+| [openai-batch/SKILL.md](openai-batch/SKILL.md) | RLM `QueryBatched` → OpenAI Batch, `pkg/openaibatch`, PreferBatch fallback contract |
 
 Wire discovery: [../BOOTSTRAP.md](../BOOTSTRAP.md). Entry: [../../AGENTS.md](../../AGENTS.md). Human pitch: [../../README.md](../../README.md).
 

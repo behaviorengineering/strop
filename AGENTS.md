@@ -8,6 +8,7 @@ This module is a Go library for tempering LLM outputs (evaluate, refine, gate). 
 2. [ai-copilots/skills/strop-pipeline-pattern/SKILL.md](ai-copilots/skills/strop-pipeline-pattern/SKILL.md) (JobRunner, clients, modules, evaluators)
 3. [ai-copilots/skills/strop-orchestration/SKILL.md](ai-copilots/skills/strop-orchestration/SKILL.md) (refinement and composition loops)
 4. [ai-copilots/skills/strop-human-review/SKILL.md](ai-copilots/skills/strop-human-review/SKILL.md) (Gate, reviewflow ports)
+5. [ai-copilots/skills/openai-batch/SKILL.md](ai-copilots/skills/openai-batch/SKILL.md) (RLM `QueryBatched` → OpenAI Batch, PreferBatch defaults)
 
 Cross-product DSPy-Go practice (`dspy-*` skills) lives in the host's shared cursor-packs, not in this module.
 
