@@ -21,6 +21,7 @@ type LLMFactory struct {
 	logger         stroplog.Logger
 	moduleTimeout  time.Duration // Default timeout for HTTP clients (defaults to module timeout if provider.Timeout not set).
 	instrumentHTTP func(*http.Client)
+	wrapLLM        func(core.LLM) core.LLM // optional host decorator (applied last before return)
 }
 
 // NewLLMFactory creates a new LLM factory.
@@ -42,6 +43,15 @@ func (f *LLMFactory) SetInstrumentHTTP(fn func(*http.Client)) {
 		return
 	}
 	f.instrumentHTTP = fn
+}
+
+// SetWrapLLM sets an optional decorator applied to every LLM after internal wrappers.
+// Nil fn clears the hook. Hosts use this for batch inference pacing without forking CreateLLM.
+func (f *LLMFactory) SetWrapLLM(fn func(core.LLM) core.LLM) {
+	if f == nil {
+		return
+	}
+	f.wrapLLM = fn
 }
 
 // CreateLLM configures and returns an LLM instance based on the provider configuration.
@@ -178,6 +188,10 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	// Register model for cost tracking. Local Polypus stays labeled polypus in Phoenix.
 	if f.onModelCreated != nil {
 		f.onModelCreated(string(modelID), providerNameForTrace(apiSchema, provider.BaseURL))
+	}
+
+	if f.wrapLLM != nil {
+		llmInstance = f.wrapLLM(llmInstance)
 	}
 
 	return llmInstance, nil

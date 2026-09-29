@@ -107,6 +107,14 @@ func RunCompositionLoop(
 				if c := runreport.CollectorFromContext(ctx); c != nil {
 					c.RecordPhase(string(phase.ID), attempt, false, 0, truncateFeedback(err.Error(), 200))
 				}
+				RecordPipelineAttempt(ctx, PipelineAttempt{
+					Scope:        compositionScope(phase),
+					Action:       "generate_gate",
+					Attempt:      attempt,
+					FailureClass: ClassifyFailure(err),
+					Passed:       false,
+					Err:          truncateFeedback(err.Error(), 400),
+				})
 				sendCompositionEvent(eventChan, fmt.Sprintf(
 					"Composition phase %s error: %s",
 					phaseLabel(phase),
@@ -114,6 +122,15 @@ func RunCompositionLoop(
 				))
 				return nil, err
 			}
+			RecordPipelineAttempt(ctx, PipelineAttempt{
+				Scope:        compositionScope(phase),
+				Action:       "generate_gate",
+				Attempt:      attempt,
+				FailureClass: FailureClassForGateResult(result.Passed),
+				Passed:       result.Passed,
+				Score:        result.Score,
+				Feedback:     truncateFeedback(result.Feedback, 400),
+			})
 			attemptHistory = append(attemptHistory, CompensationAttempt{
 				Attempt:  attempt,
 				Score:    result.Score,
@@ -158,8 +175,23 @@ func RunCompositionLoop(
 		}
 
 		if err := runPhaseCompensation(ctx, strategy, phase, lastFeedback, lastFailedFields, attemptHistory, eventChan); err != nil {
+			RecordPipelineAttempt(ctx, PipelineAttempt{
+				Scope:        compositionScope(phase),
+				Action:       "compensate_exhausted",
+				Attempt:      maxAttempts,
+				FailureClass: ClassifyFailure(err),
+				Passed:       false,
+				Err:          truncateFeedback(err.Error(), 400),
+			})
 			return nil, err
 		}
+		RecordPipelineAttempt(ctx, PipelineAttempt{
+			Scope:        compositionScope(phase),
+			Action:       "compensate_pass",
+			Attempt:      maxAttempts,
+			FailureClass: "",
+			Passed:       true,
+		})
 	}
 
 	sendCompositionEvent(eventChan, "Composition completed for all phases")
@@ -233,8 +265,23 @@ func runPhaseCompensation(
 
 		plan, err := comp.PlanRepair(ctx, evidence, eventChan)
 		if err != nil {
+			RecordPipelineAttempt(ctx, PipelineAttempt{
+				Scope:        compositionScope(phase),
+				Action:       "compensate_plan",
+				Attempt:      attempt,
+				FailureClass: ClassifyFailure(err),
+				Passed:       false,
+				Err:          truncateFeedback(err.Error(), 400),
+			})
 			return fmt.Errorf("composition phase %s compensate plan: %w", phase.ID, err)
 		}
+		RecordPipelineAttempt(ctx, PipelineAttempt{
+			Scope:        compositionScope(phase),
+			Action:       "compensate_plan",
+			Attempt:      attempt,
+			Passed:       true,
+			Feedback:     truncateFeedback(plan.Summary, 400),
+		})
 
 		sendCompositionEvent(eventChan, fmt.Sprintf(
 			"Composition phase %s compensate apply (attempt %d/%d)",
@@ -258,6 +305,15 @@ func runPhaseCompensation(
 			Score:    result.Score,
 			Feedback: truncateFeedback(result.Feedback, 400),
 			Passed:   result.Passed,
+		})
+		RecordPipelineAttempt(ctx, PipelineAttempt{
+			Scope:        compositionScope(phase),
+			Action:       "compensate_apply",
+			Attempt:      attempt,
+			FailureClass: FailureClassForGateResult(result.Passed),
+			Passed:       result.Passed,
+			Score:        result.Score,
+			Feedback:     truncateFeedback(result.Feedback, 400),
 		})
 		if result.Passed {
 			if c := runreport.CollectorFromContext(ctx); c != nil {
@@ -289,6 +345,10 @@ func runPhaseCompensation(
 		compBudget,
 		truncateFeedback(feedback, 500),
 	)
+}
+
+func compositionScope(phase PhaseDef) string {
+	return "composition:" + string(phase.ID)
 }
 
 func phaseLabel(phase PhaseDef) string {
