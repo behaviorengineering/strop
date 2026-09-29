@@ -3,6 +3,7 @@ package openaibatch
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // HTTPError is a non-2xx response from the batch HTTP surface.
@@ -87,4 +88,21 @@ func hasStatus(err error, code int) bool {
 		return he.StatusCode == code
 	}
 	return false
+}
+
+// PostSubmitBatchError reports whether err may have created a remote batch job
+// (poll, status get, or output download failed after submit).
+func PostSubmitBatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "openaibatch: poll batch") ||
+		strings.Contains(msg, "openaibatch: get batch") ||
+		strings.Contains(msg, "openaibatch: download file")
+}
+
+// IsFailedPrecondition reports HTTP 400 or 422 (model not batchable, invalid input).
+func IsFailedPrecondition(err error) bool {
+	return hasStatus(err, 400) || hasStatus(err, 422)
 }
