@@ -11,7 +11,7 @@ description: >-
 
 **Module:** `github.com/behaviorengineering/strop` (orchestration failure class `transient_infra`).
 
-**Related:** `.cursor/skills/strop-orchestration/SKILL.md` (§ pipeline trajectory / `transient_infra`).
+**Related:** `.cursor/skills/strop-orchestration/SKILL.md` (§ pipeline trajectory / `transient_infra`). `.cursor/skills/openai-batch/SKILL.md` (RLM `QueryBatched` fan-out; pace still applies to sync `Generate` and throttle on batch fallback).
 
 ---
 
