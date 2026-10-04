@@ -43,6 +43,7 @@ ai-copilots/
     strop-orchestration/SKILL.md
     strop-human-review/SKILL.md
     inference-pace/SKILL.md
+    openai-batch/SKILL.md
 ```
 
 `ai-copilots/review-hooks.yaml` is the staged-review manifest; hosts discover it via soft-linked skills (see cursor-packs `review-code-staged`).
@@ -65,6 +66,7 @@ ai-copilots/
 | `strop-orchestration` | `ai-copilots/skills/strop-orchestration/` |
 | `strop-human-review` | `ai-copilots/skills/strop-human-review/` |
 | `inference-pace` | `ai-copilots/skills/inference-pace/` |
+| `openai-batch` | `ai-copilots/skills/openai-batch/` |
 
 | IDE | Skills |
 |-----|--------|
@@ -101,6 +103,7 @@ link_strop_skill strop-pipeline-pattern ai-copilots/skills/strop-pipeline-patter
 link_strop_skill strop-orchestration ai-copilots/skills/strop-orchestration
 link_strop_skill strop-human-review ai-copilots/skills/strop-human-review
 link_strop_skill inference-pace ai-copilots/skills/inference-pace
+link_strop_skill openai-batch ai-copilots/skills/openai-batch
 ```
 
 When the workspace root is this module:
@@ -111,6 +114,7 @@ ln -snf ../ai-copilots/skills/strop-pipeline-pattern .cursor/skills/strop-pipeli
 ln -snf ../ai-copilots/skills/strop-orchestration .cursor/skills/strop-orchestration
 ln -snf ../ai-copilots/skills/strop-human-review .cursor/skills/strop-human-review
 ln -snf ../ai-copilots/skills/inference-pace .cursor/skills/inference-pace
+ln -snf ../ai-copilots/skills/openai-batch .cursor/skills/openai-batch
 ```
 
 **Windows:** junction or developer-mode symlink; copy only with user approval.

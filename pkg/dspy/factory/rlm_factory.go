@@ -3,8 +3,10 @@ package factory
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	stropdspy "github.com/behaviorengineering/strop/pkg/dspy"
+	"github.com/behaviorengineering/strop/pkg/openaibatch"
 
 	dspyrlm "github.com/XiaoConstantine/dspy-go/pkg/modules/rlm"
 )
@@ -23,6 +25,14 @@ func (f *GeneratorFactory) CreateRLM(
 	}
 	if err := provider.Validate(); err != nil {
 		return nil, fmt.Errorf(ErrInvalidProviderConfig, err)
+	}
+	cfg.BatchModel = strings.TrimSpace(provider.Model)
+	if strings.EqualFold(strings.TrimSpace(provider.APISchema), "openai") {
+		root, err := openaibatch.GatewayRoot(provider.BaseURL)
+		if err == nil {
+			cfg.OpenAIBatch.BaseURL = root
+			cfg.OpenAIBatch.APIKey = provider.APIKey
+		}
 	}
 	llm, err := f.configurator.llmFactory.CreateLLM(ctx, provider)
 	if err != nil {

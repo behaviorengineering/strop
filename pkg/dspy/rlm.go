@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/behaviorengineering/strop/pkg/dspy/subllm"
+	"github.com/behaviorengineering/strop/pkg/openaibatch"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	dspyrlm "github.com/XiaoConstantine/dspy-go/pkg/modules/rlm"
@@ -23,9 +27,19 @@ const RLMInputsDumpFile = "rlm_inputs.jsonl"
 // RLMConfig holds portable Recursive Language Model construction options.
 // Hosts supply task queries and context; strop does not encode product vocabularies.
 // Recommended construction (config create): set LLM and budgets on the config, then call CreateModule.
+// OpenAIBatchConfig enables OpenAI Batch for RLM QueryBatched fan-out.
+type OpenAIBatchConfig struct {
+	BaseURL  string // gateway root (no /v1 suffix)
+	APIKey   string
+	Headers  map[string]string
+	Disabled bool
+}
+
 type RLMConfig struct {
 	// LLM is required for CreateModule. Resolve via factory.LLMFactory (or factory.CreateRLM), then set.
 	LLM                      core.LLM
+	OpenAIBatch              OpenAIBatchConfig
+	BatchModel               string // model id for batch JSONL; set from provider before LLM wrap
 	MaxIterations            int
 	MaxTokens                int
 	Timeout                  time.Duration
@@ -58,7 +72,41 @@ func (c RLMConfig) CreateModule() (*dspyrlm.RLM, error) {
 	if c.LLM == nil {
 		return nil, fmt.Errorf("RLMConfig.CreateModule: LLM is required")
 	}
-	return dspyrlm.NewFromLLM(c.LLM, rlmOptions(c)...), nil
+	return dspyrlm.New(c.LLM, c.subLLMClient(), rlmOptions(c)...), nil
+}
+
+func (c RLMConfig) subLLMClient() dspyrlm.SubLLMClient {
+	sync := dspyrlm.NewLLMSubClient(c.LLM)
+	if !openAIBatchEnabled(c) {
+		return sync
+	}
+	client := openaibatch.Client{
+		BaseURL: c.OpenAIBatch.BaseURL,
+		APIKey:  c.OpenAIBatch.APIKey,
+		Headers: c.OpenAIBatch.Headers,
+	}
+	model := strings.TrimSpace(c.BatchModel)
+	if model == "" {
+		model = strings.TrimSpace(c.LLM.ModelID())
+	}
+	return subllm.NewPreferBatch(sync, client, model)
+}
+
+func openAIBatchEnabled(c RLMConfig) bool {
+	if c.OpenAIBatch.Disabled || os.Getenv("STROP_OPENAI_BATCH") == "0" {
+		return false
+	}
+	if c.MaxTokens > 0 {
+		slog.Warn("openaibatch: RLMConfig.MaxTokens>0 disables batch QueryBatched")
+		return false
+	}
+	if strings.TrimSpace(c.OpenAIBatch.BaseURL) == "" {
+		return false
+	}
+	if strings.TrimSpace(c.BatchModel) == "" && strings.TrimSpace(c.LLM.ModelID()) == "" {
+		return false
+	}
+	return true
 }
 
 // RLMComplete runs one RLM completion and returns the final answer text.

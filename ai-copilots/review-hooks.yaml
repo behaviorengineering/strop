@@ -10,6 +10,7 @@ in_scope:
 
 stage5_skills:
   - inference-pace
+  - openai-batch
   - strop-orchestration
 
 mechanical_stages:
@@ -28,6 +29,9 @@ consultant_briefs:
   - stage: B
     skill: inference-pace
     when: Batch LLM jobs, parallel inspectors, or provider throttle handling
+  - stage: B
+    skill: openai-batch
+    when: RLM QueryBatched fan-out, pkg/openaibatch, or PreferBatch / CreateRLM batch wiring
   - stage: C
     skill: strop-pipeline-pattern
     when: Generators or evaluators should be isolatable without full pipeline
