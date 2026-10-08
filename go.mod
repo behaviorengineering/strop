@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/XiaoConstantine/dspy-go v0.89.0
 	github.com/emvi/iso-639-1 v1.1.1
+	github.com/failsafe-go/failsafe-go v0.9.8
 	github.com/google/uuid v1.6.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.12.1
@@ -38,6 +39,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.47.1 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
