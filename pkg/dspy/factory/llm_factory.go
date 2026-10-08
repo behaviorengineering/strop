@@ -11,6 +11,7 @@ import (
 	stroplog "github.com/behaviorengineering/strop/pkg/log"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/XiaoConstantine/dspy-go/pkg/interceptors"
 	"github.com/XiaoConstantine/dspy-go/pkg/llms"
 )
 
@@ -21,6 +22,7 @@ type LLMFactory struct {
 	logger         stroplog.Logger
 	moduleTimeout  time.Duration // Default timeout for HTTP clients (defaults to module timeout if provider.Timeout not set).
 	instrumentHTTP func(*http.Client)
+	retryConfig    *interceptors.RetryConfig
 	wrapLLM        func(core.LLM) core.LLM // optional host decorator (applied last before return)
 }
 
@@ -35,6 +37,14 @@ func NewLLMFactory(onModelCreated func(modelID string, providerType string), mod
 // SetLogger sets the logger for the LLM factory (optional, for debugging).
 func (f *LLMFactory) SetLogger(logger stroplog.Logger) {
 	f.logger = logger
+}
+
+// SetRetryConfig sets transport retry policy for LLM HTTP clients.
+func (f *LLMFactory) SetRetryConfig(cfg *interceptors.RetryConfig) {
+	if f == nil {
+		return
+	}
+	f.retryConfig = cfg
 }
 
 // SetInstrumentHTTP sets an optional HTTP client instrumenter (app OTEL wrapping).
@@ -202,14 +212,21 @@ type httpClientGetter interface {
 }
 
 func (f *LLMFactory) instrumentLLMHTTPClient(llm core.LLM) {
-	if f == nil || f.instrumentHTTP == nil {
+	if f == nil {
 		return
 	}
 	getter, ok := llm.(httpClientGetter)
 	if !ok {
 		return
 	}
-	f.instrumentHTTP(getter.GetHTTPClient())
+	client := getter.GetHTTPClient()
+	if client == nil {
+		return
+	}
+	instrumentClientRetryOnce(client, f.retryConfig)
+	if f.instrumentHTTP != nil {
+		f.instrumentHTTP(client)
+	}
 }
 
 func providerNameForTrace(apiSchema, baseURL string) string {

@@ -15,6 +15,7 @@ type GroundingConfig struct {
 type ProviderConfig struct {
 	APIKey           string
 	Model            string
+	EmbedModel       string
 	BaseURL          string
 	Timeout          string
 	RateLimit        int

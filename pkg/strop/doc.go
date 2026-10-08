@@ -7,11 +7,11 @@
 //  3. Dependencies use small interfaces and strop-owned options structs.
 //  4. App adapters (logger, config mapping) live in the consuming app.
 //
-// Included: regenerate, imageread, log, refinement, streaming, runreport,
+// Included: embed (CosineSimilarity for vector scoring), regenerate, imageread, log, refinement, streaming, runreport,
 // agentsession (one directory per short-lived agent conversation under an
 // app-injected Root), orchestration (including NewFieldWalkStrategy, NewSectionWalkStrategy,
 // DocumentArcDefinition, DocumentSectionDefinition), dspy (ProviderConfig, XML
-// structured output, factories, registry, JobRunner, workflow, modules,
+// structured output, factories including LLMFactory.CreateEmbedder, registry, JobRunner, workflow, modules,
 // generic validation, tracing), evaluation (criteria engine + generic
 // rubrics; product packs register in the app; RoleInfo uses EvaluatorKey and
 // ConsolidatorKey; ExpertKey identifies feedback-analysis experts), humanreview
