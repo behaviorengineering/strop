@@ -2,8 +2,10 @@ package subllm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -157,6 +159,113 @@ func TestPreferBatchPostSubmitDoesNotSync(t *testing.T) {
 	}
 	if sync.batchCalls.Load() != 0 {
 		t.Fatal("must not sync after batch submit")
+	}
+}
+
+type lineEchoBatchRunner struct {
+	calls atomic.Int32
+	last  []openaibatch.ChatLine
+}
+
+func (s *lineEchoBatchRunner) RunChatBatch(_ context.Context, lines []openaibatch.ChatLine) (map[string]openaibatch.LineResult, error) {
+	s.calls.Add(1)
+	s.last = lines
+	out := make(map[string]openaibatch.LineResult, len(lines))
+	for _, ln := range lines {
+		out[ln.CustomID] = openaibatch.LineResult{Content: "batch:" + ln.CustomID}
+	}
+	return out, nil
+}
+
+func TestPreferBatch_RunChatLines_happyBatch(t *testing.T) {
+	sync := &recordingSubLLM{}
+	runner := &lineEchoBatchRunner{}
+	client := openaibatch.Client{BaseURL: "http://example.com"}
+	pb := NewPreferBatch(sync, client, "m",
+		WithBatchProbe(func(context.Context) (bool, bool, error) { return true, false, nil }),
+		WithBatchRunner(runner),
+	).(*PreferBatch)
+	lines := []openaibatch.ChatLine{
+		{CustomID: "hash-a", Model: "m", Messages: []map[string]string{{"role": "system", "content": "sys"}, {"role": "user", "content": "a"}}},
+		{CustomID: "hash-b", Model: "m", Messages: []map[string]string{{"role": "user", "content": "b"}}},
+	}
+	got, err := pb.RunChatLines(context.Background(), lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runner.calls.Load() != 1 {
+		t.Fatalf("batch calls=%d", runner.calls.Load())
+	}
+	if got["hash-a"].Content != "batch:hash-a" || got["hash-b"].Content != "batch:hash-b" {
+		t.Fatalf("got=%v", got)
+	}
+	if sync.batchCalls.Load() != 0 {
+		t.Fatal("sync should not run")
+	}
+}
+
+func TestPreferBatch_RunChatLines_probe404Sync(t *testing.T) {
+	var chatPosts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chat/completions" {
+			chatPosts.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{
+					{"message": map[string]string{"content": "ok"}},
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	sync := &recordingSubLLM{}
+	client := openaibatch.Client{BaseURL: srv.URL, HTTPClient: srv.Client()}
+	pb := NewPreferBatch(sync, client, "m",
+		WithBatchProbe(func(context.Context) (bool, bool, error) { return false, false, nil }),
+		WithBatchRunner(&stubBatchRunner{}),
+	).(*PreferBatch)
+	lines := []openaibatch.ChatLine{
+		{CustomID: "id-1", Model: "m", Messages: []map[string]string{{"role": "user", "content": "a"}}},
+		{CustomID: "id-2", Model: "m", Messages: []map[string]string{{"role": "user", "content": "b"}}},
+	}
+	got, err := pb.RunChatLines(context.Background(), lines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chatPosts.Load() != 2 {
+		t.Fatalf("chat posts=%d", chatPosts.Load())
+	}
+	if got["id-1"].Content != "ok" || got["id-2"].Content != "ok" {
+		t.Fatalf("got=%v", got)
+	}
+}
+
+func TestPreferBatch_RunChatLines_postSubmitNoSync(t *testing.T) {
+	var chatPosts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chat/completions" {
+			chatPosts.Add(1)
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	sync := &recordingSubLLM{}
+	runner := &stubBatchRunner{err: fmt.Errorf("openaibatch: poll batch: context deadline exceeded")}
+	client := openaibatch.Client{BaseURL: srv.URL, HTTPClient: srv.Client()}
+	pb := NewPreferBatch(sync, client, "m",
+		WithBatchProbe(func(context.Context) (bool, bool, error) { return true, false, nil }),
+		WithBatchRunner(runner),
+	).(*PreferBatch)
+	_, err := pb.RunChatLines(context.Background(), []openaibatch.ChatLine{
+		{CustomID: "a", Model: "m", Messages: []map[string]string{{"role": "user", "content": "x"}}},
+		{CustomID: "b", Model: "m", Messages: []map[string]string{{"role": "user", "content": "y"}}},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if chatPosts.Load() != 0 {
+		t.Fatal("must not sync chat after batch submit")
 	}
 }
 
