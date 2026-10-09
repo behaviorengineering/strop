@@ -1,7 +1,9 @@
 package subllm
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,9 +17,9 @@ import (
 )
 
 const (
-	defaultProbeTimeout      = 5 * time.Second
-	defaultMinBatchDeadline  = 30 * time.Second
-	batchListPath            = "/v1/batches"
+	defaultProbeTimeout     = 5 * time.Second
+	defaultMinBatchDeadline = 30 * time.Second
+	batchListPath           = "/v1/batches"
 )
 
 // batchRunner is the batch HTTP surface PreferBatch uses (usually openaibatch.Client).
@@ -27,10 +29,11 @@ type batchRunner interface {
 
 // PreferBatch routes QueryBatched to OpenAI Batch when available and falls back to sync.
 type PreferBatch struct {
-	sync   dspyrlm.SubLLMClient
-	batch  batchRunner
-	model  string
-	probe  func(ctx context.Context) (available bool, throttle bool, err error)
+	sync     dspyrlm.SubLLMClient
+	batch    batchRunner
+	oaClient *openaibatch.Client
+	model    string
+	probe    func(ctx context.Context) (available bool, throttle bool, err error)
 
 	mu          sync.Mutex
 	probeDone   bool
@@ -76,6 +79,7 @@ func NewPreferBatch(sync dspyrlm.SubLLMClient, client openaibatch.Client, model 
 	p := &PreferBatch{
 		sync:             sync,
 		batch:            &client,
+		oaClient:         &client,
 		model:            model,
 		minBatchDeadline: defaultMinBatchDeadline,
 	}
@@ -123,6 +127,135 @@ func (p *PreferBatch) QueryBatched(ctx context.Context, prompts []string) ([]dsp
 		return nil, err
 	}
 	return mapBatchResults(ids, results), nil
+}
+
+// RunChatLines prefers OpenAI Batch for len>1 when the gateway supports it.
+// Sync fallback posts each line sequentially and preserves custom_id.
+func (p *PreferBatch) RunChatLines(ctx context.Context, lines []openaibatch.ChatLine) (map[string]openaibatch.LineResult, error) {
+	if p == nil || p.sync == nil {
+		return nil, fmt.Errorf("subllm: prefer batch: client is nil")
+	}
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	if len(lines) == 1 || p.shouldUseSync(ctx) || p.batch == nil {
+		return p.syncChatLines(ctx, lines)
+	}
+	available, throttle, err := p.ensureAvailable(ctx)
+	if err != nil && !throttle {
+		return nil, err
+	}
+	if throttle || !available {
+		return p.syncChatLines(ctx, lines)
+	}
+	normalized := normalizeChatLines(p.model, lines)
+	results, err := p.batch.RunChatBatch(ctx, normalized)
+	if err != nil {
+		if p.allowSyncFallback(err) {
+			return p.syncChatLines(ctx, normalized)
+		}
+		return nil, err
+	}
+	return results, nil
+}
+
+func normalizeChatLines(model string, lines []openaibatch.ChatLine) []openaibatch.ChatLine {
+	out := make([]openaibatch.ChatLine, len(lines))
+	for i, ln := range lines {
+		out[i] = ln
+		if strings.TrimSpace(out[i].Model) == "" {
+			out[i].Model = model
+		}
+	}
+	return out
+}
+
+func (p *PreferBatch) syncChatLines(ctx context.Context, lines []openaibatch.ChatLine) (map[string]openaibatch.LineResult, error) {
+	if p.oaClient == nil {
+		return nil, fmt.Errorf("subllm: prefer batch: openai client is nil")
+	}
+	out := make(map[string]openaibatch.LineResult, len(lines))
+	for _, ln := range lines {
+		id := strings.TrimSpace(ln.CustomID)
+		if id == "" {
+			return nil, fmt.Errorf("subllm: prefer batch: custom_id is required")
+		}
+		content, err := p.postChatCompletion(ctx, ln)
+		if err != nil {
+			out[id] = openaibatch.LineResult{ErrMessage: err.Error()}
+			continue
+		}
+		out[id] = openaibatch.LineResult{Content: content}
+	}
+	return out, nil
+}
+
+func (p *PreferBatch) postChatCompletion(ctx context.Context, ln openaibatch.ChatLine) (string, error) {
+	base, err := openaibatch.GatewayRoot(p.oaClient.BaseURL)
+	if err != nil {
+		return "", err
+	}
+	model := strings.TrimSpace(ln.Model)
+	if model == "" {
+		model = strings.TrimSpace(p.model)
+	}
+	if model == "" {
+		return "", fmt.Errorf("subllm: prefer batch: model is required")
+	}
+	body := map[string]any{
+		"model":    model,
+		"messages": ln.Messages,
+	}
+	if ln.MaxTokens > 0 {
+		body["max_tokens"] = ln.MaxTokens
+	}
+	rawBody, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/chat/completions", bytes.NewReader(rawBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(p.oaClient.APIKey) != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(p.oaClient.APIKey))
+	}
+	for k, v := range p.oaClient.Headers {
+		if strings.TrimSpace(k) != "" {
+			req.Header.Set(k, v)
+		}
+	}
+	httpClient := p.oaClient.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("subllm: chat completion: http %d: %s", resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", err
+	}
+	if len(parsed.Choices) == 0 {
+		return "", fmt.Errorf("subllm: chat completion: empty choices")
+	}
+	return parsed.Choices[0].Message.Content, nil
 }
 
 func (p *PreferBatch) shouldUseSync(ctx context.Context) bool {
