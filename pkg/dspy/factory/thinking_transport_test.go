@@ -26,7 +26,7 @@ func (c *captureRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	}, nil
 }
 
-func TestThinkingRoundTripperAddsEnableThinking(t *testing.T) {
+func TestThinkingRoundTripperAddsReasoningEffort(t *testing.T) {
 	capture := &captureRoundTripper{}
 	req, err := http.NewRequest(
 		http.MethodPost,
@@ -51,12 +51,15 @@ func TestThinkingRoundTripperAddsEnableThinking(t *testing.T) {
 	if err := json.Unmarshal(capture.body, &payload); err != nil {
 		t.Fatalf("decode forwarded request: %v", err)
 	}
-	kwargs, ok := payload["chat_template_kwargs"].(map[string]any)
-	if !ok {
-		t.Fatalf("chat_template_kwargs = %#v, want object", payload["chat_template_kwargs"])
+	if payload["chat_template_kwargs"] != nil {
+		t.Fatalf("chat_template_kwargs must be absent, got %#v", payload["chat_template_kwargs"])
 	}
-	if enabled, ok := kwargs["enable_thinking"].(bool); !ok || !enabled {
-		t.Fatalf("enable_thinking = %#v, want true", kwargs["enable_thinking"])
+	reasoning, ok := payload["reasoning"].(map[string]any)
+	if !ok {
+		t.Fatalf("reasoning = %#v, want object", payload["reasoning"])
+	}
+	if effort, _ := reasoning["effort"].(string); effort != "high" {
+		t.Fatalf("reasoning.effort = %#v, want high", reasoning["effort"])
 	}
 }
 
