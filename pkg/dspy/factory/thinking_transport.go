@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// thinkingRoundTripper adds the Gemma 4 chat-template option to chat requests.
+// thinkingRoundTripper adds OpenAI reasoning.effort to chat completion requests.
 type thinkingRoundTripper struct {
 	base http.RoundTripper
 }
@@ -50,14 +50,12 @@ func (t thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return nil, fmt.Errorf("decode chat completion request: %w", err)
 	}
 
-	templateKwargs := map[string]any{}
-	if existing, ok := payload["chat_template_kwargs"].(map[string]any); ok {
-		for key, value := range existing {
-			templateKwargs[key] = value
-		}
+	reasoning, _ := payload["reasoning"].(map[string]any)
+	if reasoning == nil {
+		reasoning = map[string]any{}
 	}
-	templateKwargs["enable_thinking"] = true
-	payload["chat_template_kwargs"] = templateKwargs
+	reasoning["effort"] = "high"
+	payload["reasoning"] = reasoning
 
 	updatedBody, err := json.Marshal(payload)
 	if err != nil {
