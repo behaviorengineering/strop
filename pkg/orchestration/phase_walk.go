@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/behaviorengineering/strop/pkg/evaluation"
@@ -222,6 +223,46 @@ func (s *phaseWalkStrategy) Result() (*CompositionResult, error) {
 		OutputState: st,
 		EvalPayload: agg,
 	}, nil
+}
+
+// RewindDraftTo clears owned fields from phaseID through the last phase and drops matching eval state.
+func (s *phaseWalkStrategy) RewindDraftTo(phaseID PhaseID) error {
+	idx := -1
+	for i, phase := range s.phases {
+		if phase.ID == phaseID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("phase walk rewind: unknown phase %q", phaseID)
+	}
+	phaseLabels := make(map[string]struct{})
+	for i := idx; i < len(s.phases); i++ {
+		pid := string(s.phases[i].ID)
+		phaseLabels[pid] = struct{}{}
+		for _, field := range s.owned[s.phases[i].ID] {
+			delete(s.draft, field)
+		}
+		delete(s.lastFailed, pid)
+	}
+	if len(s.passedEvals) > 0 {
+		kept := make([]evaluation.LabeledEval, 0, len(s.passedEvals))
+		keptScores := make([]float64, 0, len(s.scores))
+		for j, le := range s.passedEvals {
+			if _, drop := phaseLabels[le.Label]; drop {
+				continue
+			}
+			kept = append(kept, le)
+			if j < len(s.scores) {
+				keptScores = append(keptScores, s.scores[j])
+			}
+		}
+		s.passedEvals = kept
+		s.scores = keptScores
+	}
+	s.rationales = nil
+	return nil
 }
 
 // lockedPriorFields returns non-empty owned fields from all phases that come before activeID.

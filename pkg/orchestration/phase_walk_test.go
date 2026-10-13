@@ -271,6 +271,27 @@ func TestPhaseWalkStrategy_noOwnedFieldsAcceptsAllReturned(t *testing.T) {
 	require.NotNil(t, result)
 }
 
+func TestPhaseWalkStrategy_RewindDraftTo(t *testing.T) {
+	t.Parallel()
+	runner := &fakePhaseRunner{t: t}
+	strategy := NewPhaseWalkStrategy(PhaseWalkConfig{
+		Phases:      multiPhaseWalkDefs(),
+		OwnedFields: multiPhaseWalkOwned(),
+		Runner:      runner,
+	})
+	_, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.NoError(t, err)
+	dr, ok := strategy.(DraftRewinder)
+	require.True(t, ok)
+	require.NoError(t, dr.RewindDraftTo("body"))
+	st, err := strategy.Result()
+	require.NoError(t, err)
+	draft := st.OutputState.(*PhaseWalkState).Draft
+	assert.Equal(t, "out-intro_title", draft["intro_title"])
+	assert.Empty(t, draft["body_main"])
+	assert.Empty(t, draft["close_cta"])
+}
+
 func TestPhaseWalkStrategy_seedPopulatesDraft(t *testing.T) {
 	t.Parallel()
 	runner := &fakePhaseRunner{t: t}
