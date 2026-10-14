@@ -7,7 +7,7 @@
 //  3. Dependencies use small interfaces and strop-owned options structs.
 //  4. App adapters (logger, config mapping) live in the consuming app.
 //
-// Included: embed (CosineSimilarity for vector scoring), regenerate, imageread, log, refinement, streaming, runreport,
+// Included: jev (SystemOne Eval and multi-row BatchRows packer), embed (CosineSimilarity for vector scoring), regenerate, imageread, log, refinement, streaming, runreport,
 // agentsession (one directory per short-lived agent conversation under an
 // app-injected Root), orchestration (including NewFieldWalkStrategy, NewSectionWalkStrategy,
 // DocumentArcDefinition, DocumentSectionDefinition), dspy (ProviderConfig, XML
