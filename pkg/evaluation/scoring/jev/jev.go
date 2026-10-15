@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/behaviorengineering/strop/pkg/evaluation/criteria"
 	"github.com/behaviorengineering/strop/pkg/evaluation/scoring"
@@ -18,6 +19,10 @@ import (
 type Options struct {
 	ScorePrompt string
 	Rubric      map[criteria.CriterionID]string
+	BaseURL     string
+	APIKey      string
+	Model       string
+	Timeout     time.Duration
 }
 
 // jevBackend scores criteria via decide.Decide and TypeSafe System One.
@@ -30,7 +35,7 @@ type jevBackend struct {
 }
 
 // NewBackend builds a scoring.Backend for the given criterion IDs.
-// When client is nil, typesafe.NewClient() is used (TYPESAFE_API_KEY, etc.).
+// When client is nil, a typesafe client is built from Options (BaseURL, APIKey, Model, Timeout).
 func NewBackend(client decide.SystemOneClient, criterionIDs []criteria.CriterionID, opts Options) (scoring.Backend, error) {
 	if len(criterionIDs) == 0 {
 		return nil, fmt.Errorf("jev: at least one criterion ID is required")
@@ -47,7 +52,7 @@ func NewBackend(client decide.SystemOneClient, criterionIDs []criteria.Criterion
 	}
 
 	if client == nil {
-		c, err := typesafe.NewClient()
+		c, err := newTypesafeClient(opts)
 		if err != nil {
 			return nil, fmt.Errorf("jev: typesafe client: %w", err)
 		}
@@ -102,6 +107,23 @@ func NewBackend(client decide.SystemOneClient, criterionIDs []criteria.Criterion
 		maxPoints:    maxPoints,
 		opts:         opts,
 	}, nil
+}
+
+func newTypesafeClient(opts Options) (*typesafe.Client, error) {
+	clientOpts := make([]typesafe.ClientOption, 0, 4)
+	if strings.TrimSpace(opts.APIKey) != "" {
+		clientOpts = append(clientOpts, typesafe.WithAPIKey(strings.TrimSpace(opts.APIKey)))
+	}
+	if strings.TrimSpace(opts.BaseURL) != "" {
+		clientOpts = append(clientOpts, typesafe.WithBaseURL(strings.TrimSpace(opts.BaseURL)))
+	}
+	if strings.TrimSpace(opts.Model) != "" {
+		clientOpts = append(clientOpts, typesafe.WithDefaultModel(strings.TrimSpace(opts.Model)))
+	}
+	if opts.Timeout > 0 {
+		clientOpts = append(clientOpts, typesafe.WithTimeout(opts.Timeout))
+	}
+	return typesafe.NewClient(clientOpts...)
 }
 
 func (b *jevBackend) Generate(ctx context.Context, req scoring.ScoreRequest, _ ...core.Option) (scoring.ScoreResult, error) {
