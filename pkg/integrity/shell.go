@@ -28,11 +28,16 @@ type ValidateFunc func(raw string) error
 // CompleteNoteFunc builds the user turn after a validation failure.
 type CompleteNoteFunc func(validateErr error) string
 
+// CompensateFunc runs once after MaxAttempts still fail Validate.
+// messages is the thread at exhaust and does not include lastRaw.
+type CompensateFunc func(ctx context.Context, messages []Message, lastRaw string, lastErr error) (string, error)
+
 // ShellConfig configures CreateShell.
 type ShellConfig struct {
 	Chat         ChatFunc
 	Validate     ValidateFunc
 	CompleteNote CompleteNoteFunc
+	Compensate   CompensateFunc
 	MaxAttempts  int
 }
 
@@ -41,6 +46,7 @@ type Shell struct {
 	chat         ChatFunc
 	validate     ValidateFunc
 	completeNote CompleteNoteFunc
+	compensate   CompensateFunc
 	maxAttempts  int
 }
 
@@ -65,6 +71,7 @@ func CreateShell(cfg ShellConfig) (*Shell, error) {
 		chat:         cfg.Chat,
 		validate:     cfg.Validate,
 		completeNote: note,
+		compensate:   cfg.Compensate,
 		maxAttempts:  max,
 	}, nil
 }
@@ -149,7 +156,7 @@ func (s *Shell) loopWithBudget(ctx context.Context, op string, messages []Messag
 		}
 		lastErr = valErr
 		if attempt+1 >= attempts {
-			return lastRaw, exhausted(op, "validation failed", lastErr)
+			return s.finishAfterExhaust(ctx, op, messages, lastRaw, lastErr)
 		}
 		messages = append(messages,
 			Message{Role: RoleAssistant, Content: raw},
@@ -159,7 +166,22 @@ func (s *Shell) loopWithBudget(ctx context.Context, op string, messages []Messag
 	if lastErr == nil {
 		lastErr = ErrExhausted
 	}
-	return lastRaw, exhausted(op, "validation failed", lastErr)
+	return s.finishAfterExhaust(ctx, op, messages, lastRaw, lastErr)
+}
+
+func (s *Shell) finishAfterExhaust(ctx context.Context, op string, messages []Message, lastRaw string, lastErr error) (string, error) {
+	if s.compensate == nil {
+		return lastRaw, exhausted(op, "validation failed", lastErr)
+	}
+	compRaw, compErr := s.compensate(ctx, messages, lastRaw, lastErr)
+	if compErr != nil {
+		return lastRaw, wrapChat(op, compErr)
+	}
+	valErr := s.validate(compRaw)
+	if valErr == nil {
+		return compRaw, nil
+	}
+	return compRaw, exhausted(op, "validation failed", valErr)
 }
 
 func (s *Shell) noteFor(err error) string {
