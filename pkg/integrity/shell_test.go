@@ -261,3 +261,164 @@ func TestResumeContinue(t *testing.T) {
 		t.Fatalf("user %+v", msgs[3])
 	}
 }
+
+type compensateRecorder struct {
+	calls     int
+	messages  []Message
+	lastRaw   string
+	lastErr   error
+	returnRaw string
+	returnErr error
+}
+
+func (c *compensateRecorder) compensate(ctx context.Context, messages []Message, lastRaw string, lastErr error) (string, error) {
+	c.calls++
+	c.messages = append([]Message{}, messages...)
+	c.lastRaw = lastRaw
+	c.lastErr = lastErr
+	if c.returnErr != nil {
+		return "", c.returnErr
+	}
+	return c.returnRaw, nil
+}
+
+func TestRunCompensateSuccess(t *testing.T) {
+	rec := &recordingChat{responses: []string{"TITLE: only", "TITLE: still"}}
+	comp := &compensateRecorder{returnRaw: "TITLE: ok\nBODY: ok"}
+	sh, err := CreateShell(ShellConfig{
+		Chat:        rec.chat,
+		Validate:    validateTitleBody,
+		Compensate:  comp.compensate,
+		MaxAttempts: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "BODY:") {
+		t.Fatalf("raw %q", raw)
+	}
+	if len(rec.calls) != 2 {
+		t.Fatalf("chat calls %d", len(rec.calls))
+	}
+	if comp.calls != 1 {
+		t.Fatalf("compensate calls %d", comp.calls)
+	}
+	if comp.lastRaw != "TITLE: still" {
+		t.Fatalf("lastRaw %q", comp.lastRaw)
+	}
+	if len(comp.messages) != 4 {
+		t.Fatalf("compensate messages %d", len(comp.messages))
+	}
+}
+
+func TestRunCompensateStillInvalid(t *testing.T) {
+	rec := &recordingChat{responses: []string{"a", "b"}}
+	comp := &compensateRecorder{returnRaw: "still bad"}
+	sh, err := CreateShell(ShellConfig{
+		Chat:        rec.chat,
+		Validate:    validateTitleBody,
+		Compensate:  comp.compensate,
+		MaxAttempts: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if raw != "still bad" {
+		t.Fatalf("raw %q", raw)
+	}
+	if !errors.Is(err, ErrExhausted) {
+		t.Fatalf("expected ErrExhausted, got %v", err)
+	}
+	cause := ValidationError(err)
+	if cause == nil || !strings.Contains(cause.Error(), "missing TITLE") {
+		t.Fatalf("cause %v", cause)
+	}
+}
+
+func TestRunCompensateChatError(t *testing.T) {
+	transportErr := errors.New("compensate down")
+	rec := &recordingChat{responses: []string{"a", "b"}}
+	comp := &compensateRecorder{returnErr: transportErr}
+	sh, err := CreateShell(ShellConfig{
+		Chat:        rec.chat,
+		Validate:    validateTitleBody,
+		Compensate:  comp.compensate,
+		MaxAttempts: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if errors.Is(err, ErrExhausted) {
+		t.Fatal("compensate transport must not be exhausted")
+	}
+	if !errors.Is(err, transportErr) {
+		t.Fatalf("expected transport cause, got %v", err)
+	}
+}
+
+func TestRunChatErrorDoesNotCompensate(t *testing.T) {
+	chatErr := errors.New("transport down")
+	rec := &recordingChat{
+		responses: []string{"TITLE: x\nBODY: y"},
+		errOn:     1,
+		err:       chatErr,
+	}
+	comp := &compensateRecorder{returnRaw: "TITLE: x\nBODY: y"}
+	sh, err := CreateShell(ShellConfig{
+		Chat:       rec.chat,
+		Validate:   validateTitleBody,
+		Compensate: comp.compensate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if comp.calls != 0 {
+		t.Fatalf("compensate calls %d", comp.calls)
+	}
+}
+
+func TestResumeCompensate(t *testing.T) {
+	rec := &recordingChat{responses: []string{"TITLE: partial"}}
+	comp := &compensateRecorder{returnRaw: "TITLE: ok\nBODY: ok"}
+	sh, err := CreateShell(ShellConfig{
+		Chat:         rec.chat,
+		Validate:     validateTitleBody,
+		CompleteNote: func(error) string { return "finish" },
+		Compensate:   comp.compensate,
+		MaxAttempts:  2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "usr"},
+	}
+	parseErr := errors.New("missing TITLE or BODY")
+	raw, err := sh.Resume(ctxWithDeadline(t), prior, "TITLE: only", parseErr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "BODY:") {
+		t.Fatalf("raw %q", raw)
+	}
+	if comp.calls != 1 {
+		t.Fatalf("compensate calls %d", comp.calls)
+	}
+}
