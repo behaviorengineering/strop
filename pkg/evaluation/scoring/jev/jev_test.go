@@ -75,6 +75,17 @@ func TestNewBackend_requiresCriterionIDs(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestNewBackend_acceptsConnectionOptionsWithStubClient(t *testing.T) {
+	t.Parallel()
+	ids := []criteria.CriterionID{criteria.CriterionIDInstructionCompliance}
+	_, err := jev.NewBackend(&stubSystemOneClient{scoreIndex: 1}, ids, jev.Options{
+		BaseURL: "http://127.0.0.1:1320/v1/apis/systemone",
+		APIKey:  "local",
+		Model:   "catalog-model",
+	})
+	require.NoError(t, err)
+}
+
 func TestBackend_scoresAllCriteria_onRegistryScale(t *testing.T) {
 	t.Parallel()
 	ids := []criteria.CriterionID{
