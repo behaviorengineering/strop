@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"context"
 	"time"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
@@ -117,6 +118,15 @@ type InferenceEvent struct {
 	Timestamp         time.Time
 	Error             error
 	TokenUsage        *core.TokenInfo
+	// Operator progress (composition phase boundaries); forwarded to CLI NDJSON when set.
+	PlanStep    string
+	Attempt     int
+	MaxAttempts int
+	// Inner DSPy retry attempt (distinct from PlanStep Attempt).
+	CallAttempt      int
+	CallMaxAttempts  int
+	NeedsOperator    bool
+	ErrorFingerprint string
 }
 
 // EventChannel is a channel for streaming inference events.
@@ -174,5 +184,44 @@ func SendInfo(eventChan EventChannel, content string) {
 		Timestamp: time.Now(),
 	}:
 	default:
+	}
+}
+
+// SendProgress sends a blocking info event for operator-visible plan progress.
+// It waits until the event is queued or ctx is cancelled. No-op if eventChan is nil or content is empty.
+func SendProgress(ctx context.Context, eventChan EventChannel, content string, planStep string, attempt, maxAttempts int) {
+	if eventChan == nil || content == "" {
+		return
+	}
+	ev := InferenceEvent{
+		Type:        EventTypeInfo,
+		Content:     content,
+		Timestamp:   time.Now(),
+		PlanStep:    planStep,
+		Attempt:     attempt,
+		MaxAttempts: maxAttempts,
+	}
+	select {
+	case eventChan <- ev:
+	case <-ctx.Done():
+	}
+}
+
+// SendCallProgress sends a blocking info event for an inner module retry attempt.
+// It waits until the event is queued or ctx is cancelled. No-op if eventChan is nil.
+func SendCallProgress(ctx context.Context, eventChan EventChannel, moduleName string, callAttempt, callMaxAttempts int) {
+	if eventChan == nil || callAttempt <= 0 || callMaxAttempts <= 0 {
+		return
+	}
+	ev := InferenceEvent{
+		Type:            EventTypeInfo,
+		ModuleName:      moduleName,
+		Timestamp:       time.Now(),
+		CallAttempt:     callAttempt,
+		CallMaxAttempts: callMaxAttempts,
+	}
+	select {
+	case eventChan <- ev:
+	case <-ctx.Done():
 	}
 }

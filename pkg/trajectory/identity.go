@@ -57,6 +57,15 @@ func PlanID(id Identity) string {
 	return fmt.Sprintf("%s_%s_%s_v%d", pipeline, job, entity, version)
 }
 
+// PlanIDPrefix is PlanID without the _vN suffix, used when listing versioned plans.
+func PlanIDPrefix(id Identity) string {
+	full := PlanID(id)
+	if i := strings.LastIndex(full, "_v"); i >= 0 {
+		return full[:i]
+	}
+	return full
+}
+
 // HashBytes returns a short hex digest for InputRef hashes.
 func HashBytes(parts ...[]byte) string {
 	h := sha256.New()
