@@ -267,24 +267,27 @@ type compensateRecorder struct {
 	messages  []Message
 	lastRaw   string
 	lastErr   error
-	returnRaw string
+	steer     Steer
 	returnErr error
 }
 
-func (c *compensateRecorder) compensate(ctx context.Context, messages []Message, lastRaw string, lastErr error) (string, error) {
+func (c *compensateRecorder) compensate(ctx context.Context, messages []Message, lastRaw string, lastErr error) (Steer, error) {
 	c.calls++
 	c.messages = append([]Message{}, messages...)
 	c.lastRaw = lastRaw
 	c.lastErr = lastErr
 	if c.returnErr != nil {
-		return "", c.returnErr
+		return Steer{}, c.returnErr
 	}
-	return c.returnRaw, nil
+	return c.steer, nil
 }
 
 func TestRunCompensateSuccess(t *testing.T) {
 	rec := &recordingChat{responses: []string{"TITLE: only", "TITLE: still"}}
-	comp := &compensateRecorder{returnRaw: "TITLE: ok\nBODY: ok"}
+	reenter := &recordingChat{responses: []string{"TITLE: ok\nBODY: ok"}}
+	comp := &compensateRecorder{
+		steer: Steer{Action: SteerReenter, Chat: reenter.chat, Attempts: 1, Restart: true},
+	}
 	sh, err := CreateShell(ShellConfig{
 		Chat:        rec.chat,
 		Validate:    validateTitleBody,
@@ -304,20 +307,23 @@ func TestRunCompensateSuccess(t *testing.T) {
 	if len(rec.calls) != 2 {
 		t.Fatalf("chat calls %d", len(rec.calls))
 	}
+	if len(reenter.calls) != 1 {
+		t.Fatalf("reenter chat calls %d", len(reenter.calls))
+	}
 	if comp.calls != 1 {
 		t.Fatalf("compensate calls %d", comp.calls)
 	}
 	if comp.lastRaw != "TITLE: still" {
 		t.Fatalf("lastRaw %q", comp.lastRaw)
 	}
-	if len(comp.messages) != 4 {
-		t.Fatalf("compensate messages %d", len(comp.messages))
-	}
 }
 
 func TestRunCompensateStillInvalid(t *testing.T) {
 	rec := &recordingChat{responses: []string{"a", "b"}}
-	comp := &compensateRecorder{returnRaw: "still bad"}
+	reenter := &recordingChat{responses: []string{"still bad"}}
+	comp := &compensateRecorder{
+		steer: Steer{Action: SteerReenter, Chat: reenter.chat, Attempts: 1, Restart: true},
+	}
 	sh, err := CreateShell(ShellConfig{
 		Chat:        rec.chat,
 		Validate:    validateTitleBody,
@@ -340,6 +346,9 @@ func TestRunCompensateStillInvalid(t *testing.T) {
 	cause := ValidationError(err)
 	if cause == nil || !strings.Contains(cause.Error(), "missing TITLE") {
 		t.Fatalf("cause %v", cause)
+	}
+	if comp.calls != 1 {
+		t.Fatalf("compensate calls %d", comp.calls)
 	}
 }
 
@@ -375,7 +384,7 @@ func TestRunChatErrorDoesNotCompensate(t *testing.T) {
 		errOn:     1,
 		err:       chatErr,
 	}
-	comp := &compensateRecorder{returnRaw: "TITLE: x\nBODY: y"}
+	comp := &compensateRecorder{steer: Steer{Action: SteerReenter, Chat: rec.chat, Attempts: 1}}
 	sh, err := CreateShell(ShellConfig{
 		Chat:       rec.chat,
 		Validate:   validateTitleBody,
@@ -395,7 +404,10 @@ func TestRunChatErrorDoesNotCompensate(t *testing.T) {
 
 func TestResumeCompensate(t *testing.T) {
 	rec := &recordingChat{responses: []string{"TITLE: partial"}}
-	comp := &compensateRecorder{returnRaw: "TITLE: ok\nBODY: ok"}
+	reenter := &recordingChat{responses: []string{"TITLE: ok\nBODY: ok"}}
+	comp := &compensateRecorder{
+		steer: Steer{Action: SteerReenter, Chat: reenter.chat, Attempts: 1, Restart: true},
+	}
 	sh, err := CreateShell(ShellConfig{
 		Chat:         rec.chat,
 		Validate:     validateTitleBody,
@@ -420,5 +432,158 @@ func TestResumeCompensate(t *testing.T) {
 	}
 	if comp.calls != 1 {
 		t.Fatalf("compensate calls %d", comp.calls)
+	}
+}
+
+func TestRunAfterMissRestartOmitsFailedRaw(t *testing.T) {
+	rec := &recordingChat{responses: []string{
+		"TITLE: only",
+		"TITLE: ok\nBODY: ok",
+	}}
+	sh, err := CreateShell(ShellConfig{
+		Chat:      rec.chat,
+		Validate:  validateTitleBody,
+		AfterMiss: func(error) MissAction { return MissRestart },
+		MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "BODY:") {
+		t.Fatalf("raw %q", raw)
+	}
+	if len(rec.calls) != 2 {
+		t.Fatalf("chat calls %d", len(rec.calls))
+	}
+	if len(rec.calls[1]) != 2 {
+		t.Fatalf("restart call messages %d", len(rec.calls[1]))
+	}
+}
+
+func TestRunCompensateReenterSwapsChat(t *testing.T) {
+	inner := &recordingChat{responses: []string{"a", "b", "c"}}
+	other := &recordingChat{responses: []string{"TITLE: ok\nBODY: ok"}}
+	comp := &compensateRecorder{
+		steer: Steer{Action: SteerReenter, Chat: other.chat, Attempts: 3, Restart: true},
+	}
+	sh, err := CreateShell(ShellConfig{
+		Chat:        inner.chat,
+		Validate:    validateTitleBody,
+		Compensate:  comp.compensate,
+		MaxAttempts: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "BODY:") {
+		t.Fatalf("raw %q", raw)
+	}
+	if len(inner.calls) != 2 {
+		t.Fatalf("inner calls %d", len(inner.calls))
+	}
+	if len(other.calls) != 1 {
+		t.Fatalf("other calls %d", len(other.calls))
+	}
+	if comp.calls != 1 {
+		t.Fatalf("compensate calls %d", comp.calls)
+	}
+}
+
+func TestRunCompensateReenterDoesNotNest(t *testing.T) {
+	inner := &recordingChat{responses: []string{"a", "b"}}
+	other := &recordingChat{responses: []string{"x", "y", "z"}}
+	comp := &compensateRecorder{
+		steer: Steer{Action: SteerReenter, Chat: other.chat, Attempts: 3, Restart: true},
+	}
+	sh, err := CreateShell(ShellConfig{
+		Chat:        inner.chat,
+		Validate:    validateTitleBody,
+		Compensate:  comp.compensate,
+		MaxAttempts: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrExhausted) {
+		t.Fatalf("expected ErrExhausted, got %v", err)
+	}
+	if comp.calls != 1 {
+		t.Fatalf("compensate calls %d", comp.calls)
+	}
+	if len(other.calls) != 3 {
+		t.Fatalf("other calls %d", len(other.calls))
+	}
+}
+
+func TestRunCompensateStop(t *testing.T) {
+	rec := &recordingChat{responses: []string{"a", "b"}}
+	comp := &compensateRecorder{steer: Steer{Action: SteerStop}}
+	sh, err := CreateShell(ShellConfig{
+		Chat:        rec.chat,
+		Validate:    validateTitleBody,
+		Compensate:  comp.compensate,
+		MaxAttempts: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sh.Run(ctxWithDeadline(t), "sys", "usr")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if raw != "b" {
+		t.Fatalf("raw %q", raw)
+	}
+	if !errors.Is(err, ErrExhausted) {
+		t.Fatalf("expected ErrExhausted, got %v", err)
+	}
+	if comp.calls != 1 {
+		t.Fatalf("compensate calls %d", comp.calls)
+	}
+	if len(rec.calls) != 2 {
+		t.Fatalf("chat calls %d", len(rec.calls))
+	}
+}
+
+func TestResumeRestartSkipsAssistantAppend(t *testing.T) {
+	rec := &recordingChat{responses: []string{"TITLE: ok\nBODY: ok"}}
+	sh, err := CreateShell(ShellConfig{
+		Chat:      rec.chat,
+		Validate:  validateTitleBody,
+		AfterMiss: func(error) MissAction { return MissRestart },
+		MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "usr"},
+	}
+	parseErr := errors.New("missing TITLE or BODY")
+	raw, err := sh.Resume(ctxWithDeadline(t), prior, "TITLE: partial", parseErr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "BODY:") {
+		t.Fatalf("raw %q", raw)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("calls %d", len(rec.calls))
+	}
+	if len(rec.calls[0]) != 2 {
+		t.Fatalf("messages %d", len(rec.calls[0]))
 	}
 }

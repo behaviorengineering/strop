@@ -28,15 +28,12 @@ type ValidateFunc func(raw string) error
 // CompleteNoteFunc builds the user turn after a validation failure.
 type CompleteNoteFunc func(validateErr error) string
 
-// CompensateFunc runs once after MaxAttempts still fail Validate.
-// messages is the thread at exhaust and does not include lastRaw.
-type CompensateFunc func(ctx context.Context, messages []Message, lastRaw string, lastErr error) (string, error)
-
 // ShellConfig configures CreateShell.
 type ShellConfig struct {
 	Chat         ChatFunc
 	Validate     ValidateFunc
 	CompleteNote CompleteNoteFunc
+	AfterMiss    AfterMissFunc
 	Compensate   CompensateFunc
 	MaxAttempts  int
 }
@@ -46,6 +43,7 @@ type Shell struct {
 	chat         ChatFunc
 	validate     ValidateFunc
 	completeNote CompleteNoteFunc
+	afterMiss    AfterMissFunc
 	compensate   CompensateFunc
 	maxAttempts  int
 }
@@ -71,6 +69,7 @@ func CreateShell(cfg ShellConfig) (*Shell, error) {
 		chat:         cfg.Chat,
 		validate:     cfg.Validate,
 		completeNote: note,
+		afterMiss:    cfg.AfterMiss,
 		compensate:   cfg.Compensate,
 		maxAttempts:  max,
 	}, nil
@@ -93,11 +92,12 @@ func (s *Shell) Run(ctx context.Context, system, user string) (string, error) {
 	if system == "" && user == "" {
 		return "", invalid(op, "empty system and user")
 	}
-	messages := []Message{
+	seed := []Message{
 		{Role: RoleSystem, Content: system},
 		{Role: RoleUser, Content: user},
 	}
-	return s.loop(ctx, op, messages)
+	messages := append([]Message{}, seed...)
+	return s.loopWithBudget(ctx, op, s.chat, messages, s.maxAttempts, true, seed)
 }
 
 // Resume continues after a prior first attempt (e.g. batch prefetch) failed validation.
@@ -112,16 +112,22 @@ func (s *Shell) Resume(ctx context.Context, prior []Message, lastRaw string, las
 	if len(prior) == 0 {
 		return lastRaw, invalid(op, "empty prior with validation error")
 	}
+	seed := append([]Message{}, prior...)
 	messages := append([]Message{}, prior...)
-	messages = append(messages,
-		Message{Role: RoleAssistant, Content: lastRaw},
-		Message{Role: RoleUser, Content: s.noteFor(lastErr)},
-	)
+	switch s.missAction(lastErr) {
+	case MissRestart:
+		// Retry from seed without appending the failed prefetch turn.
+	default:
+		messages = append(messages,
+			Message{Role: RoleAssistant, Content: lastRaw},
+			Message{Role: RoleUser, Content: s.noteFor(lastErr)},
+		)
+	}
 	remaining := s.maxAttempts - 1
 	if remaining <= 0 {
-		return lastRaw, exhausted(op, "validation failed", lastErr)
+		return s.finishAfterExhaust(ctx, op, messages, lastRaw, lastErr, seed, s.chat, true)
 	}
-	return s.loopWithBudget(ctx, op, messages, remaining)
+	return s.loopWithBudget(ctx, op, s.chat, messages, remaining, true, seed)
 }
 
 func (s *Shell) requireReady(ctx context.Context, op string) error {
@@ -137,15 +143,31 @@ func (s *Shell) requireReady(ctx context.Context, op string) error {
 	return nil
 }
 
-func (s *Shell) loop(ctx context.Context, op string, messages []Message) (string, error) {
-	return s.loopWithBudget(ctx, op, messages, s.maxAttempts)
+func (s *Shell) missAction(valErr error) MissAction {
+	if s == nil || s.afterMiss == nil {
+		return MissContinue
+	}
+	switch s.afterMiss(valErr) {
+	case MissRestart:
+		return MissRestart
+	default:
+		return MissContinue
+	}
 }
 
-func (s *Shell) loopWithBudget(ctx context.Context, op string, messages []Message, attempts int) (string, error) {
+func (s *Shell) loopWithBudget(
+	ctx context.Context,
+	op string,
+	chat ChatFunc,
+	messages []Message,
+	attempts int,
+	allowCompensate bool,
+	seed []Message,
+) (string, error) {
 	var lastRaw string
 	var lastErr error
 	for attempt := 0; attempt < attempts; attempt++ {
-		raw, chatErr := s.chat(ctx, messages)
+		raw, chatErr := chat(ctx, messages)
 		if chatErr != nil {
 			return raw, wrapChat(op, chatErr)
 		}
@@ -156,32 +178,57 @@ func (s *Shell) loopWithBudget(ctx context.Context, op string, messages []Messag
 		}
 		lastErr = valErr
 		if attempt+1 >= attempts {
-			return s.finishAfterExhaust(ctx, op, messages, lastRaw, lastErr)
+			break
 		}
-		messages = append(messages,
-			Message{Role: RoleAssistant, Content: raw},
-			Message{Role: RoleUser, Content: s.noteFor(valErr)},
-		)
+		switch s.missAction(valErr) {
+		case MissRestart:
+			messages = append([]Message{}, seed...)
+		default:
+			messages = append(messages,
+				Message{Role: RoleAssistant, Content: raw},
+				Message{Role: RoleUser, Content: s.noteFor(valErr)},
+			)
+		}
 	}
 	if lastErr == nil {
 		lastErr = ErrExhausted
 	}
-	return s.finishAfterExhaust(ctx, op, messages, lastRaw, lastErr)
+	return s.finishAfterExhaust(ctx, op, messages, lastRaw, lastErr, seed, chat, allowCompensate)
 }
 
-func (s *Shell) finishAfterExhaust(ctx context.Context, op string, messages []Message, lastRaw string, lastErr error) (string, error) {
-	if s.compensate == nil {
+func (s *Shell) finishAfterExhaust(
+	ctx context.Context,
+	op string,
+	messages []Message,
+	lastRaw string,
+	lastErr error,
+	seed []Message,
+	chat ChatFunc,
+	allowCompensate bool,
+) (string, error) {
+	if !allowCompensate || s.compensate == nil {
 		return lastRaw, exhausted(op, "validation failed", lastErr)
 	}
-	compRaw, compErr := s.compensate(ctx, messages, lastRaw, lastErr)
+	steer, compErr := s.compensate(ctx, messages, lastRaw, lastErr)
 	if compErr != nil {
 		return lastRaw, wrapChat(op, compErr)
 	}
-	valErr := s.validate(compRaw)
-	if valErr == nil {
-		return compRaw, nil
+	if steer.Action != SteerReenter {
+		return lastRaw, exhausted(op, "validation failed", lastErr)
 	}
-	return compRaw, exhausted(op, "validation failed", valErr)
+	nextChat := chat
+	if steer.Chat != nil {
+		nextChat = steer.Chat
+	}
+	nextAttempts := s.maxAttempts
+	if steer.Attempts > 0 {
+		nextAttempts = steer.Attempts
+	}
+	nextMessages := messages
+	if steer.Restart {
+		nextMessages = append([]Message{}, seed...)
+	}
+	return s.loopWithBudget(ctx, op, nextChat, nextMessages, nextAttempts, false, seed)
 }
 
 func (s *Shell) noteFor(err error) string {
