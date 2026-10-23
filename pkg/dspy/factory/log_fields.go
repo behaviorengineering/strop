@@ -11,7 +11,7 @@ const (
 
 // Provider API schema names used when creating LLMs.
 const (
-	apiSchemaOpenAI   = "openai"
-	apiSchemaGoogle   = "google"
+	apiSchemaOpenAI    = "openai"
+	apiSchemaGoogle    = "google"
 	apiSchemaSystemOne = "systemone"
 )
