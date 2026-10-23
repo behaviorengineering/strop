@@ -272,6 +272,103 @@ func TestRunCompositionLoop_zeroCompensateBudgetHardFails(t *testing.T) {
 	assert.Equal(t, 0, strategy.planCalls)
 }
 
+type mockPassRewinderStrategy struct {
+	mockCompositionStrategy
+	budget         int
+	afterCalls     int
+	rewindTo       PhaseID
+	rewindOnPhase  PhaseID
+	rewindFeedback string
+	afterErr       error
+	rewoundOnce    bool
+	alwaysRewind   bool
+}
+
+func (m *mockPassRewinderStrategy) RewindBudget() int {
+	return m.budget
+}
+
+func (m *mockPassRewinderStrategy) AfterPhasePass(
+	_ context.Context,
+	phase PhaseDef,
+	_ *PhaseResult,
+	_ streaming.EventChannel,
+) (*PhaseRewindVerdict, error) {
+	m.afterCalls++
+	if m.afterErr != nil {
+		return nil, m.afterErr
+	}
+	trigger := m.rewindOnPhase
+	if trigger == "" {
+		trigger = m.rewindTo
+	}
+	if m.rewindTo != "" && phase.ID == trigger && (m.alwaysRewind || !m.rewoundOnce) {
+		if !m.alwaysRewind {
+			m.rewoundOnce = true
+		}
+		return &PhaseRewindVerdict{
+			RewindTo: m.rewindTo,
+			Feedback: m.rewindFeedback,
+			Reason:   "test rewind",
+		}, nil
+	}
+	return &PhaseRewindVerdict{}, nil
+}
+
+func TestRunCompositionLoop_passRewinderBudgetZero(t *testing.T) {
+	strategy := &mockPassRewinderStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases:    []PhaseDef{{ID: "a", MaxAttempts: 1}},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"a": 1},
+		},
+		budget: 0,
+	}
+	_, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, strategy.afterCalls)
+}
+
+func TestRunCompositionLoop_passRewindToEarlierPhase(t *testing.T) {
+	strategy := &mockPassRewinderStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases: []PhaseDef{
+				{ID: "a", MaxAttempts: 3},
+				{ID: "b", MaxAttempts: 3},
+			},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"a": 1, "b": 1},
+		},
+		budget:         2,
+		rewindTo:       "a",
+		rewindOnPhase:  "b",
+		rewindFeedback: "fix hook cadence",
+	}
+	out, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	assert.Equal(t, 2, strategy.attempts["a"])
+	assert.Equal(t, 2, strategy.attempts["b"])
+}
+
+func TestRunCompositionLoop_passRewindBudgetExhausted(t *testing.T) {
+	strategy := &mockPassRewinderStrategy{
+		mockCompositionStrategy: mockCompositionStrategy{
+			phases:    []PhaseDef{{ID: "a", MaxAttempts: 1}},
+			attempts:  make(map[PhaseID]int),
+			passOnTry: map[PhaseID]int{"a": 1},
+		},
+		budget:         1,
+		rewindTo:       "a",
+		rewindFeedback: "again",
+		alwaysRewind:   true,
+	}
+	out, err := RunCompositionLoop(context.Background(), strategy, nil)
+	require.Error(t, err)
+	assert.Nil(t, out)
+	assert.Contains(t, err.Error(), "rewind budget exhausted")
+}
+
 func TestRunCompositionLoop_resultError(t *testing.T) {
 	strategy := &mockCompositionStrategy{
 		phases: []PhaseDef{

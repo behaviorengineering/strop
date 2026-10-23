@@ -2,8 +2,10 @@
 name: strop-pipeline-pattern
 description: >-
   Pipeline layout on strop: JobRunner, per-job clients and modules, typed inputs,
-  chained evaluators with criteria, one table per job, and XML-first structured output.
-  Use when adding a pipeline or job, aligning clients to strop, or wiring evaluation workflows.
+  chained evaluators with criteria, one table per job, XML-first structured output,
+  and mandatory execution and data-flow diagrams with data-shape transitions.
+  Use when adding a pipeline or job, aligning clients to strop, wiring evaluation
+  workflows, or explaining how domain input becomes DSPy output fields.
 ---
 
 # strop pipeline pattern
@@ -47,6 +49,7 @@ description: >-
 - [ ] Service uses typed input; no duplicate runner logic.
 - [ ] Refinement jobs: `strop/orchestration` — see `strop-orchestration` skill.
 - [ ] Regenerate: explicit options type (`strop/regenerate.RegenerateOptions` or app alias).
+- [ ] Full-vertical execution and data-flow diagram tracing domain inputs, model calls, Go parsing, intermediate structs, Go adapter blobs, and DSPy outputs (see §10).
 
 ---
 
@@ -176,3 +179,93 @@ When `RLMComplete` runs with TraceDir set, strop also appends `rlm_inputs.jsonl`
 - Violation: STOP, extract a module-trace span, add replay, re-check.
 
 Full practice: `.cursor/skills/dspy-pipeline-isolation/SKILL.md` (golang-quality C17). Module-trace dumps from §8 are the fixture source for CoT; RLM fixtures prefer TraceDir/`rlm_inputs.jsonl`.
+
+---
+
+## 10. Pipeline execution and data-flow diagrams
+
+**CONSTRAINT:** When implementing, changing, or explaining a strop pipeline, generator, or adapter, explanations and documentation MUST provide a vertical execution and data-flow diagram that traces every data-shape transition from domain input to DSPy output fields.
+
+- Enforcement: Scan pipeline docs, PR descriptions, and explain passes; verify domain input, typed DSPy input (`GeneratorInput` / `ToMap`), `JobRunner.Generate`, adapter seam (`core.LLM` or equivalent), each upstream model call with raw response shape, Go parse or map step, intermediate domain struct, Go-constructed adapter text or XML payload, and DSPy-parsed signature fields are all named with their representation (struct, LLM blob, Go blob, `map[string]any`).
+- Violation: STOP, list every intermediate representation, render the full vertical diagram, re-verify before claiming completion.
+
+### Required diagram stages (in order)
+
+1. **Domain input** — raw entity or message the job consumes.
+2. **Typed DSPy input** — struct implementing `GeneratorInput` (`ToMap`, `GetVersion`).
+3. **JobRunner boundary** — `runner.JobRunner` `Generate` with job key and `GenerationConfig`.
+4. **Adapter seam** — custom `core.LLM.Generate` (or runner hook) that may ignore the DSPy prompt and call domain logic.
+5. **Upstream model invocations** — one branch per model or service role:
+   - raw response format (plain text, JSON string, score map, XML);
+   - Go parsing step (`json.Unmarshal`, regex, mapper);
+   - typed Go value produced.
+6. **Intermediate domain result** — aggregated struct before adapter formatting.
+7. **Go adapter payload** — key/value or XML text the adapter returns in `LLMResponse.Content` (label as **Go-produced**, not LLM-produced).
+8. **DSPy output parsing** — signature fields extracted into the generator output map.
+
+### Standard ASCII template
+
+```text
+Domain Input (e.g. raw message / entity)
+  |
+  v
+Go creates typed DSPy input (GeneratorInput)
+  field_1: <value>
+  field_2: <value>
+  |
+  v
+DSPy JobRunner
+  |
+  v
+Go adapter: <AdapterName>.Generate(...) (core.LLM)
+  |
+  v
+Underlying engine / service call
+  |
+  +--> Model 1 (e.g. judge / scorer)
+  |      raw response (e.g. noul / choice text)
+  |        |
+  |        v
+  |      Go parses / maps into:
+  |        typed score / decision struct
+  |
+  +--> Model 2 (e.g. author / generator)
+         raw response (e.g. JSON string blob)
+           |
+           v
+         Go parses / unmarshals into:
+           typed draft / entity struct
+  |
+  v
+Go receives structured domain result (e.g. Result struct)
+  |
+  v
+Go creates adapter text payload (Go-produced key/value or XML):
+  key_1:
+  <value>
+  key_2:
+  <value>
+  |
+  v
+DSPy parses that blob into fixed signature output fields
+  output_field_1
+  output_field_2
+```
+
+CORRECT:
+
+```text
+Author LLM returns JSON text -> Go unmarshals into DraftOut -> Go formatOperateContent writes term_id:/label: lines -> DSPy maps to signature fields.
+```
+
+PROHIBITED:
+
+```text
+Raw message -> classify -> term_id=scheduling
+# black-box: no JobRunner, no adapter, no LLM vs Go blob distinction, no intermediate struct
+```
+
+**CONSTRAINT:** Diagrams MUST NOT collapse multiple model calls into one box, MUST NOT omit whether a blob was LLM-produced or Go-produced, and MUST NOT jump from domain input to DSPy output fields without intermediate structs when an adapter or parser exists.
+
+- Enforcement: Count model branches and representation changes; each MUST appear on the diagram.
+- Violation: STOP, expand the diagram, re-check.

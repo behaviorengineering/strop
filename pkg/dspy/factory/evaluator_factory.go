@@ -134,8 +134,8 @@ func CreateChainedEvaluators[R comparable](
 			}
 		}
 
-		// Setup chained module with role-specific provider.
-		if err := f.configurator.SetupChainedModule(ctx, roleProvider, chainedModule, errorPrefix); err != nil {
+		scoreLLMProvider := &roleProvider
+		if err := f.configurator.SetupChainedModule(ctx, roleProvider, scoreLLMProvider, chainedModule, errorPrefix); err != nil {
 			return nil, err
 		}
 
@@ -146,12 +146,14 @@ func CreateChainedEvaluators[R comparable](
 }
 
 // CreateChainedEvaluatorsFromConfig creates and configures chained evaluator modules from a shared config.
-// roleProviders can be nil; otherwise it overrides the default provider for specific evaluator keys.
+// roleFeedbackProviders can be nil; otherwise it overrides feedbackProvider for specific evaluator keys.
+// scoreLLMProvider is required when score generation uses an LLM module; pass nil when ScoreBackendFactory supplies scoring (JEV).
 func CreateChainedEvaluatorsFromConfig(
 	f *EvaluatorFactory,
 	ctx context.Context,
-	provider stropdspy.ProviderConfig,
-	roleProviders map[evaluation.EvaluatorKey]stropdspy.ProviderConfig,
+	feedbackProvider stropdspy.ProviderConfig,
+	scoreLLMProvider *stropdspy.ProviderConfig,
+	roleFeedbackProviders map[evaluation.EvaluatorKey]stropdspy.ProviderConfig,
 	config *stropdspy.ChainedEvaluatorConfig,
 	formatter stropdspy.EvaluatorSignatureFormatter,
 	errorPrefix string,
@@ -164,13 +166,13 @@ func CreateChainedEvaluatorsFromConfig(
 		return nil, fmt.Errorf("%s: %w", errorPrefix, err)
 	}
 	for role, chainedModule := range modulesMap {
-		roleProvider := provider
-		if roleProviders != nil {
-			if override, ok := roleProviders[role]; ok {
-				roleProvider = override
+		roleFeedbackProvider := feedbackProvider
+		if roleFeedbackProviders != nil {
+			if override, ok := roleFeedbackProviders[role]; ok {
+				roleFeedbackProvider = override
 			}
 		}
-		if err := f.configurator.SetupChainedModule(ctx, roleProvider, chainedModule, errorPrefix); err != nil {
+		if err := f.configurator.SetupChainedModule(ctx, roleFeedbackProvider, scoreLLMProvider, chainedModule, errorPrefix); err != nil {
 			return nil, fmt.Errorf("setup chained evaluator %q: %w", role, err)
 		}
 	}
@@ -182,14 +184,15 @@ func CreateChainedEvaluatorsFromConfig(
 // CreateChainedEvaluators (e.g. YouTube structural evaluators).
 func (f *EvaluatorFactory) SetupChainedModule(
 	ctx context.Context,
-	provider stropdspy.ProviderConfig,
+	feedbackProvider stropdspy.ProviderConfig,
+	scoreLLMProvider *stropdspy.ProviderConfig,
 	chainedModule core.Module,
 	errorPrefix string,
 ) error {
 	if f == nil || f.configurator == nil {
 		return errors.New("evaluator factory or configurator is nil")
 	}
-	return f.configurator.SetupChainedModule(ctx, provider, chainedModule, errorPrefix)
+	return f.configurator.SetupChainedModule(ctx, feedbackProvider, scoreLLMProvider, chainedModule, errorPrefix)
 }
 
 // CreateConsolidator creates a consolidator module for feedback merging.

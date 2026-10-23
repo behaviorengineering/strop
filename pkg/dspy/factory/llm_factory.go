@@ -81,6 +81,9 @@ func (f *LLMFactory) CreateLLM(ctx context.Context, provider stropdspy.ProviderC
 	if apiSchema == "" {
 		return nil, fmt.Errorf("api_schema is required - must be explicitly set in configuration")
 	}
+	if apiSchema == apiSchemaSystemOne {
+		return nil, fmt.Errorf("api_schema %q is not supported for chat LLM creation; use JEV score backend instead", apiSchemaSystemOne)
+	}
 	if provider.Thinking && apiSchema != apiSchemaOpenAI {
 		return nil, fmt.Errorf("thinking mode currently requires an OpenAI-compatible provider")
 	}
