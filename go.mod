@@ -19,7 +19,7 @@ require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.22.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	github.com/XiaoConstantine/llm-go v0.3.7 // indirect
+	github.com/XiaoConstantine/llm-go v0.3.6 // indirect
 	github.com/XiaoConstantine/mcp-go v0.3.1 // indirect
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/anthropics/anthropic-sdk-go v1.66.0 // indirect
@@ -102,6 +102,3 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/sqlite v1.60.1 // indirect
 )
-
-// TODO(upstream): drop when github.com/XiaoConstantine/llm-go ships trailing-choice tolerance (xynova/llm-go v0.3.7).
-replace github.com/XiaoConstantine/llm-go => github.com/xynova/llm-go v0.3.7
