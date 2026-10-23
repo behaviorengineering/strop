@@ -8,6 +8,8 @@ github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c h1:RGWPOewvK
 github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c/go.mod h1:X0CRv0ky0k6m906ixxpzmDRLvX58TFUKS2eePweuyxk=
 github.com/XiaoConstantine/dspy-go v0.89.1 h1:BFVVgJZ+5Jm2VkZMTSFIDZxc7y+UtjG1r9/MlW1QnMA=
 github.com/XiaoConstantine/dspy-go v0.89.1/go.mod h1:xt54KUO/Eex3Ju5qGXOrM1PhBBt+ImXdbmoF5RB/g5w=
+github.com/XiaoConstantine/llm-go v0.3.6 h1:IQHkFTy3FjCsjnddk7wCSnciav3PgF98KL6Q/AxvK8s=
+github.com/XiaoConstantine/llm-go v0.3.6/go.mod h1:CEbOcYyulg86F9WU2y2pQmytnqe1bHmfDvttEs5yN2c=
 github.com/XiaoConstantine/mcp-go v0.3.1 h1:5aSrqvvulbKI1hxN7Aj3iSotX0VRSpDShXIDls4ZC+U=
 github.com/XiaoConstantine/mcp-go v0.3.1/go.mod h1:qsY3Gm4CYMREmoLXEMwtf0Hdb5F957kgcpF6huoNHcY=
 github.com/andybalholm/brotli v1.2.2 h1:HzTuoo2ErYQqf5qvcJInB8uvqSVxRttzkFexPWtnceM=
@@ -171,8 +173,6 @@ github.com/tiktoken-go/tokenizer v0.7.0 h1:VMu6MPT0bXFDHr7UPh9uii7CNItVt3X9K90om
 github.com/tiktoken-go/tokenizer v0.7.0/go.mod h1:6UCYI/DtOallbmL7sSy30p6YQv60qNyU/4aVigPOx6w=
 github.com/traefik/yaegi v0.16.1 h1:f1De3DVJqIDKmnasUF6MwmWv1dSEEat0wcpXhD2On3E=
 github.com/traefik/yaegi v0.16.1/go.mod h1:4eVhbPb3LnD2VigQjhYbEJ69vDRFdT2HQNrXx8eEwUY=
-github.com/xynova/llm-go v0.3.7 h1:teA+A7cYckx7Om4ymXkhkiL+iPEdKW0l9jrVlyFF27I=
-github.com/xynova/llm-go v0.3.7/go.mod h1:CEbOcYyulg86F9WU2y2pQmytnqe1bHmfDvttEs5yN2c=
 github.com/zeebo/xxh3 v1.0.2 h1:xZmwmqxHZA8AI603jOQ0tMqmBr9lPeFwGg6d+xy9DC0=
 github.com/zeebo/xxh3 v1.0.2/go.mod h1:5NWz9Sef7zIDm2JHfFlcQvNekmcEl9ekUZQQKCYaDcA=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
