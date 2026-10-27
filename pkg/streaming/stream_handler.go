@@ -8,8 +8,10 @@ import (
 
 // StreamHandler creates a DSPy StreamHandler that sends events as the given actor.
 func StreamHandler(actor Actor, eventChan EventChannel) core.StreamHandler {
+	heartbeat := StartThinkingHeartbeat(eventChan, actor, ThinkingHeartbeatInterval)
 	return func(chunk core.StreamChunk) error {
 		if eventChan == nil {
+			heartbeat.Stop()
 			return nil
 		}
 		event := InferenceEvent{
@@ -21,11 +23,14 @@ func StreamHandler(actor Actor, eventChan EventChannel) core.StreamHandler {
 
 		switch {
 		case chunk.Error != nil:
+			heartbeat.Stop()
 			event.Type = EventTypeError
 			event.Error = chunk.Error
 		case chunk.Done:
+			heartbeat.Stop()
 			event.Type = EventTypeDone
 		default:
+			heartbeat.Stop()
 			event.Type = EventTypeChunk
 			event.Content = chunk.Content
 		}
