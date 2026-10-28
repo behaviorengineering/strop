@@ -112,9 +112,11 @@ func (c *ModuleConfigurator) SetupModule(
 
 // SetupChainedModule configures a chained module by setting up both internal modules.
 // Chained modules contain two internal modules (e.g., feedback analysis + score generation).
+// scoreLLMProvider must be non-nil when the score generation LLM module is present; pass nil when score uses an injected backend only.
 func (c *ModuleConfigurator) SetupChainedModule(
 	ctx context.Context,
-	provider stropdspy.ProviderConfig,
+	feedbackProvider stropdspy.ProviderConfig,
+	scoreLLMProvider *stropdspy.ProviderConfig,
 	chainedModule core.Module,
 	errorPrefix string,
 ) error {
@@ -124,15 +126,22 @@ func (c *ModuleConfigurator) SetupChainedModule(
 		GetScoreGenerationModule() core.Module
 	}); ok {
 		feedbackAnalysisModule := cm.GetFeedbackAnalysisModule()
-		if err := c.SetupModule(ctx, provider, feedbackAnalysisModule, errorPrefix+" - Feedback Analysis"); err != nil {
+		if err := c.SetupModule(ctx, feedbackProvider, feedbackAnalysisModule, errorPrefix+" - Feedback Analysis"); err != nil {
 			return err
 		}
 
 		scoreModule := cm.GetScoreGenerationModule()
 		if scoreModule != nil {
-			if err := c.SetupModule(ctx, provider, scoreModule, errorPrefix+" - Score Generation"); err != nil {
+			if scoreLLMProvider == nil {
+				return fmt.Errorf("%s - Score Generation: LLM provider is required when score module is present", errorPrefix)
+			}
+			if err := c.SetupModule(ctx, *scoreLLMProvider, scoreModule, errorPrefix+" - Score Generation"); err != nil {
 				return err
 			}
+			return nil
+		}
+		if scoreLLMProvider != nil {
+			return fmt.Errorf("%s - Score Generation: score LLM provider set but score module is nil (JEV backend)", errorPrefix)
 		}
 		return nil
 	}

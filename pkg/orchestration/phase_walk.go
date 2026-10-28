@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/behaviorengineering/strop/pkg/evaluation"
@@ -226,7 +227,46 @@ func (s *phaseWalkStrategy) Result() (*CompositionResult, error) {
 	}, nil
 }
 
-// lockedPriorFields returns non-empty owned fields from all phases that come before activeID.
+// RewindDraftTo clears owned fields from phaseID through the last phase and drops matching eval state.
+func (s *phaseWalkStrategy) RewindDraftTo(phaseID PhaseID) error {
+	idx := -1
+	for i, phase := range s.phases {
+		if phase.ID == phaseID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("phase walk rewind: unknown phase %q", phaseID)
+	}
+	phaseLabels := make(map[string]struct{})
+	for i := idx; i < len(s.phases); i++ {
+		pid := string(s.phases[i].ID)
+		phaseLabels[pid] = struct{}{}
+		for _, field := range s.owned[s.phases[i].ID] {
+			delete(s.draft, field)
+		}
+		delete(s.lastFailed, pid)
+	}
+	if len(s.passedEvals) > 0 {
+		kept := make([]evaluation.LabeledEval, 0, len(s.passedEvals))
+		keptScores := make([]float64, 0, len(s.scores))
+		for j, le := range s.passedEvals {
+			if _, drop := phaseLabels[le.Label]; drop {
+				continue
+			}
+			kept = append(kept, le)
+			if j < len(s.scores) {
+				keptScores = append(keptScores, s.scores[j])
+			}
+		}
+		s.passedEvals = kept
+		s.scores = keptScores
+	}
+	s.rationales = nil
+	return nil
+}
+
 func (s *phaseWalkStrategy) mergeOwnedFields(ownedFields []string, outputFields map[string]string) {
 	if len(outputFields) == 0 {
 		return
@@ -244,33 +284,9 @@ func (s *phaseWalkStrategy) mergeOwnedFields(ownedFields []string, outputFields 
 	}
 }
 
-// lockedPriorFields returns non-empty owned fields from all phases that come before activeID.
-// InvalidateFrom clears owned fields from phaseID through the last phase and drops their passed evals.
+// InvalidateFrom aliases RewindDraftTo for runner-driven RestartAt.
 func (s *phaseWalkStrategy) InvalidateFrom(phaseID PhaseID) {
-	idx := compositionPhaseIndex(s.phases, phaseID)
-	if idx < 0 {
-		return
-	}
-	for j := idx; j < len(s.phases); j++ {
-		pid := s.phases[j].ID
-		for _, field := range s.owned[pid] {
-			delete(s.draft, field)
-		}
-		delete(s.lastFailed, string(pid))
-	}
-	var keptEvals []evaluation.LabeledEval
-	var keptScores []float64
-	for i, ev := range s.passedEvals {
-		pi := compositionPhaseIndex(s.phases, PhaseID(ev.Label))
-		if pi < 0 || pi < idx {
-			keptEvals = append(keptEvals, ev)
-			if i < len(s.scores) {
-				keptScores = append(keptScores, s.scores[i])
-			}
-		}
-	}
-	s.passedEvals = keptEvals
-	s.scores = keptScores
+	_ = s.RewindDraftTo(phaseID)
 }
 
 func (s *phaseWalkStrategy) lockedPriorFields(activeID PhaseID) map[string]string {

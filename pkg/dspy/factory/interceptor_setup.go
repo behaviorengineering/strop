@@ -355,7 +355,7 @@ func (s *InterceptorSetup) reliabilityInterceptors(provider stropdspy.ProviderCo
 		chain = append(chain, interceptors.TimeoutModuleInterceptor(s.moduleTimeout))
 	}
 	if s.retryConfig != nil {
-		chain = append(chain, interceptors.RetryModuleInterceptor(*s.retryConfig))
+		chain = append(chain, NewIdenticalErrorRetryInterceptor(*s.retryConfig))
 	}
 	if attemptTimeout > 0 && attemptTimeout != s.moduleTimeout {
 		chain = append(chain, interceptors.TimeoutModuleInterceptor(attemptTimeout))
