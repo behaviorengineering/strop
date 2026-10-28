@@ -31,6 +31,7 @@ type PhaseWalkResponse struct {
 	Feedback     string
 	Eval         *evaluation.AggregatedEvaluation
 	Rationale    string
+	RestartAt    PhaseID
 }
 
 // PhaseWalkRunner runs one multi-field phase attempt (app-supplied).
@@ -177,10 +178,11 @@ func (s *phaseWalkStrategy) RunPhase(
 	}
 
 	return &PhaseResult{
-		Fields:   resp.OutputFields,
-		Score:    resp.Score,
-		Feedback: resp.Feedback,
-		Passed:   resp.Passed,
+		Fields:    resp.OutputFields,
+		Score:     resp.Score,
+		Feedback:  resp.Feedback,
+		Passed:    resp.Passed,
+		RestartAt: resp.RestartAt,
 	}, nil
 }
 
@@ -243,6 +245,34 @@ func (s *phaseWalkStrategy) mergeOwnedFields(ownedFields []string, outputFields 
 }
 
 // lockedPriorFields returns non-empty owned fields from all phases that come before activeID.
+// InvalidateFrom clears owned fields from phaseID through the last phase and drops their passed evals.
+func (s *phaseWalkStrategy) InvalidateFrom(phaseID PhaseID) {
+	idx := compositionPhaseIndex(s.phases, phaseID)
+	if idx < 0 {
+		return
+	}
+	for j := idx; j < len(s.phases); j++ {
+		pid := s.phases[j].ID
+		for _, field := range s.owned[pid] {
+			delete(s.draft, field)
+		}
+		delete(s.lastFailed, string(pid))
+	}
+	var keptEvals []evaluation.LabeledEval
+	var keptScores []float64
+	for i, ev := range s.passedEvals {
+		pi := compositionPhaseIndex(s.phases, PhaseID(ev.Label))
+		if pi < 0 || pi < idx {
+			keptEvals = append(keptEvals, ev)
+			if i < len(s.scores) {
+				keptScores = append(keptScores, s.scores[i])
+			}
+		}
+	}
+	s.passedEvals = keptEvals
+	s.scores = keptScores
+}
+
 func (s *phaseWalkStrategy) lockedPriorFields(activeID PhaseID) map[string]string {
 	locked := make(map[string]string)
 	for _, phase := range s.phases {

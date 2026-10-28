@@ -25,6 +25,18 @@ type PhaseResult struct {
 	Score    float64
 	Feedback string
 	Passed   bool
+	// RestartAt requests clearing this phase and downstream owned fields, then rerunning from RestartAt.
+	RestartAt PhaseID
+}
+
+// CompositionDraftInvalidator clears owned draft fields from the given phase onward (inclusive).
+type CompositionDraftInvalidator interface {
+	InvalidateFrom(phaseID PhaseID)
+}
+
+// CompositionRewindBudget optionally caps dependency-aware rewinds in RunCompositionLoop.
+type CompositionRewindBudget interface {
+	MaxCompositionRewinds() int
 }
 
 // FieldDemoUse is one section/phase demo pair recorded during composition.
@@ -77,7 +89,16 @@ func RunCompositionLoop(
 		return nil, fmt.Errorf("composition recipe has no phases")
 	}
 
-	for _, phase := range phases {
+	maxRewinds := defaultCompositionMaxRewinds
+	if budget, ok := strategy.(CompositionRewindBudget); ok {
+		if n := budget.MaxCompositionRewinds(); n > 0 {
+			maxRewinds = n
+		}
+	}
+	rewinds := 0
+
+	for phaseIdx := 0; phaseIdx < len(phases); {
+		phase := phases[phaseIdx]
 		maxAttempts := phase.MaxAttempts
 		if maxAttempts <= 0 {
 			maxAttempts = 1
@@ -87,6 +108,7 @@ func RunCompositionLoop(
 		var lastFailedFields map[string]string
 		var attemptHistory []CompensationAttempt
 		phasePassed := false
+		restarted := false
 
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			select {
@@ -137,6 +159,32 @@ func RunCompositionLoop(
 				Feedback: truncateFeedback(result.Feedback, 400),
 				Passed:   result.Passed,
 			})
+			if result.RestartAt != "" {
+				if inv, ok := strategy.(CompositionDraftInvalidator); ok {
+					inv.InvalidateFrom(result.RestartAt)
+					rewinds++
+					if rewinds > maxRewinds {
+						return nil, fmt.Errorf(
+							"composition exceeded %d dependency rewinds (last restart at %s)",
+							maxRewinds,
+							result.RestartAt,
+						)
+					}
+					next := compositionPhaseIndex(phases, result.RestartAt)
+					if next < 0 {
+						return nil, fmt.Errorf("composition restart_at unknown phase %s", result.RestartAt)
+					}
+					sendCompositionEvent(eventChan, fmt.Sprintf(
+						"Composition rewinding to phase %s (%s)",
+						result.RestartAt,
+						truncateFeedback(result.Feedback, 200),
+					))
+					phaseIdx = next
+					restarted = true
+					break
+				}
+			}
+
 			if result.Passed {
 				if c := runreport.CollectorFromContext(ctx); c != nil {
 					c.RecordPhase(string(phase.ID), attempt, true, result.Score, truncateFeedback(result.Feedback, 200))
@@ -170,7 +218,12 @@ func RunCompositionLoop(
 			sendCompositionEvent(eventChan, retryMsg)
 		}
 
+		if restarted {
+			continue
+		}
+
 		if phasePassed {
+			phaseIdx++
 			continue
 		}
 
@@ -192,6 +245,7 @@ func RunCompositionLoop(
 			FailureClass: "",
 			Passed:       true,
 		})
+		phaseIdx++
 	}
 
 	sendCompositionEvent(eventChan, "Composition completed for all phases")
@@ -360,6 +414,17 @@ func phaseLabel(phase PhaseDef) string {
 
 func sendCompositionEvent(eventChan streaming.EventChannel, content string) {
 	streaming.SendInfo(eventChan, content)
+}
+
+const defaultCompositionMaxRewinds = 32
+
+func compositionPhaseIndex(phases []PhaseDef, id PhaseID) int {
+	for i, p := range phases {
+		if p.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func truncateFeedback(s string, maxLen int) string {
