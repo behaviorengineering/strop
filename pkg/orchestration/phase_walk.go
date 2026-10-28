@@ -32,6 +32,7 @@ type PhaseWalkResponse struct {
 	Feedback     string
 	Eval         *evaluation.AggregatedEvaluation
 	Rationale    string
+	RestartAt    PhaseID
 }
 
 // PhaseWalkRunner runs one multi-field phase attempt (app-supplied).
@@ -178,10 +179,11 @@ func (s *phaseWalkStrategy) RunPhase(
 	}
 
 	return &PhaseResult{
-		Fields:   resp.OutputFields,
-		Score:    resp.Score,
-		Feedback: resp.Feedback,
-		Passed:   resp.Passed,
+		Fields:    resp.OutputFields,
+		Score:     resp.Score,
+		Feedback:  resp.Feedback,
+		Passed:    resp.Passed,
+		RestartAt: resp.RestartAt,
 	}, nil
 }
 
@@ -265,7 +267,6 @@ func (s *phaseWalkStrategy) RewindDraftTo(phaseID PhaseID) error {
 	return nil
 }
 
-// lockedPriorFields returns non-empty owned fields from all phases that come before activeID.
 func (s *phaseWalkStrategy) mergeOwnedFields(ownedFields []string, outputFields map[string]string) {
 	if len(outputFields) == 0 {
 		return
@@ -283,7 +284,11 @@ func (s *phaseWalkStrategy) mergeOwnedFields(ownedFields []string, outputFields 
 	}
 }
 
-// lockedPriorFields returns non-empty owned fields from all phases that come before activeID.
+// InvalidateFrom aliases RewindDraftTo for runner-driven RestartAt.
+func (s *phaseWalkStrategy) InvalidateFrom(phaseID PhaseID) {
+	_ = s.RewindDraftTo(phaseID)
+}
+
 func (s *phaseWalkStrategy) lockedPriorFields(activeID PhaseID) map[string]string {
 	locked := make(map[string]string)
 	for _, phase := range s.phases {

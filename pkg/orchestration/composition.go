@@ -25,6 +25,18 @@ type PhaseResult struct {
 	Score    float64
 	Feedback string
 	Passed   bool
+	// RestartAt requests clearing this phase and downstream owned fields, then rerunning from RestartAt.
+	RestartAt PhaseID
+}
+
+// CompositionDraftInvalidator clears owned draft fields from the given phase onward (inclusive).
+type CompositionDraftInvalidator interface {
+	InvalidateFrom(phaseID PhaseID)
+}
+
+// CompositionRewindBudget optionally caps dependency-aware rewinds in RunCompositionLoop.
+type CompositionRewindBudget interface {
+	MaxCompositionRewinds() int
 }
 
 // FieldDemoUse is one section/phase demo pair recorded during composition.
@@ -81,6 +93,12 @@ func RunCompositionLoop(
 	if pr, ok := strategy.(PhasePassRewinder); ok {
 		rewindBudget = pr.RewindBudget()
 	}
+	restartBudget := defaultCompositionMaxRewinds
+	if budget, ok := strategy.(CompositionRewindBudget); ok {
+		if n := budget.MaxCompositionRewinds(); n > 0 {
+			restartBudget = n
+		}
+	}
 	rewindsUsed := 0
 	var phaseFeedback string
 
@@ -96,6 +114,7 @@ func RunCompositionLoop(
 		var lastFailedFields map[string]string
 		var attemptHistory []CompensationAttempt
 		phasePassed := false
+		restarted := false
 		var passResult *PhaseResult
 
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -147,6 +166,40 @@ func RunCompositionLoop(
 				Feedback: truncateFeedback(result.Feedback, 400),
 				Passed:   result.Passed,
 			})
+			if result.RestartAt != "" {
+				_, hasDraft := strategy.(DraftRewinder)
+				_, hasInv := strategy.(CompositionDraftInvalidator)
+				if hasDraft || hasInv {
+					target := phaseIndex(phases, result.RestartAt)
+					if target < 0 {
+						return nil, fmt.Errorf("composition restart_at unknown phase %s", result.RestartAt)
+					}
+					if target > i {
+						return nil, fmt.Errorf(
+							"composition restart_at %s is ahead of phase %s",
+							result.RestartAt,
+							phase.ID,
+						)
+					}
+					var rewindErr error
+					i, phaseFeedback, rewindsUsed, rewindErr = applyPhaseRewind(
+						ctx, strategy, phases, i, &PhaseRewindVerdict{
+							RewindTo: result.RestartAt,
+							Feedback: result.Feedback,
+							Reason:   "restart_at",
+						}, rewindsUsed, restartBudget, eventChan,
+					)
+					if rewindErr != nil {
+						return nil, rewindErr
+					}
+					if !hasDraft {
+						strategy.(CompositionDraftInvalidator).InvalidateFrom(result.RestartAt)
+					}
+					restarted = true
+					break
+				}
+			}
+
 			if result.Passed {
 				if c := runreport.CollectorFromContext(ctx); c != nil {
 					c.RecordPhase(string(phase.ID), attempt, true, result.Score, truncateFeedback(result.Feedback, 200))
@@ -179,6 +232,10 @@ func RunCompositionLoop(
 				retryMsg += " — " + snippet
 			}
 			sendCompositionProgress(ctx, eventChan, phase, attempt, maxAttempts, retryMsg)
+		}
+
+		if restarted {
+			continue
 		}
 
 		if !phasePassed {
@@ -397,6 +454,17 @@ func sendCompositionProgress(
 	content string,
 ) {
 	streaming.SendProgress(ctx, eventChan, content, string(phase.ID), attempt, maxAttempts)
+}
+
+const defaultCompositionMaxRewinds = 32
+
+func compositionPhaseIndex(phases []PhaseDef, id PhaseID) int {
+	for i, p := range phases {
+		if p.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func truncateFeedback(s string, maxLen int) string {
