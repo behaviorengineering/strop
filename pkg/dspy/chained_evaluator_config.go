@@ -25,6 +25,8 @@ type ChainedEvaluatorConfig struct {
 	CriterionIDs []criteria.CriterionID // Optional; used by workflows for role-to-criteria mapping. Can be nil.
 	// ScoreBackendFactory optionally replaces the LLM score step for matching roles (e.g. JEV). Nil keeps LLM scoring.
 	ScoreBackendFactory func(role evaluation.EvaluatorKey, criterionIDs []criteria.CriterionID, scorePrompt string) (scoring.Backend, error)
+	// ScoreThenFeedback runs score generation before feedback analysis (JEV rubric first, then LLM checklist from zeros). Default false.
+	ScoreThenFeedback bool
 }
 
 // CreateChainedModulesFromConfig builds a chained evaluator module for each role in config.RolePrompts.
@@ -58,6 +60,7 @@ func CreateChainedModulesFromConfig(
 			config.Persona,
 			formatter,
 			scoreBackend,
+			config.ScoreThenFeedback,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create chained evaluator for role %q: %w", role, err)

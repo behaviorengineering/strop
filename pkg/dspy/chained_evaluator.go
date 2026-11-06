@@ -211,6 +211,7 @@ type ChainedEvaluatorModule struct {
 	signature              core.Signature
 	scoreCriterionIDs      []criteria.CriterionID
 	scoreGenerationPrompt  string
+	scoreThenFeedback      bool
 }
 
 // CreateChainedEvaluatorModule creates a chained evaluator (feedback analysis -> score generation).
@@ -224,7 +225,7 @@ func CreateChainedEvaluatorModule(
 	persona string,
 	formatSignature EvaluatorSignatureFormatter,
 ) (*ChainedEvaluatorModule, error) {
-	return createChainedEvaluatorModule(signature, roleName, feedbackAnalysisPrompt, scoreGenerationPrompt, persona, formatSignature, nil)
+	return createChainedEvaluatorModule(signature, roleName, feedbackAnalysisPrompt, scoreGenerationPrompt, persona, formatSignature, nil, false)
 }
 
 // CreateChainedEvaluatorModuleWithScoreBackend is like CreateChainedEvaluatorModule but injects a custom score backend (e.g. JEV).
@@ -237,8 +238,9 @@ func CreateChainedEvaluatorModuleWithScoreBackend(
 	persona string,
 	formatSignature EvaluatorSignatureFormatter,
 	scoreBackend scoring.Backend,
+	scoreThenFeedback bool,
 ) (*ChainedEvaluatorModule, error) {
-	return createChainedEvaluatorModule(signature, roleName, feedbackAnalysisPrompt, scoreGenerationPrompt, persona, formatSignature, scoreBackend)
+	return createChainedEvaluatorModule(signature, roleName, feedbackAnalysisPrompt, scoreGenerationPrompt, persona, formatSignature, scoreBackend, scoreThenFeedback)
 }
 
 func createChainedEvaluatorModule(
@@ -249,6 +251,7 @@ func createChainedEvaluatorModule(
 	persona string,
 	formatSignature EvaluatorSignatureFormatter,
 	scoreBackend scoring.Backend,
+	scoreThenFeedback bool,
 ) (*ChainedEvaluatorModule, error) {
 	evalField := func(name, desc string) core.Field {
 		return core.NewField(name, core.WithNoPrefix(), core.WithDescription(desc))
@@ -266,6 +269,18 @@ func createChainedEvaluatorModule(
 			{Field: evalField("feedback", "Checklist-based feedback. Always provide at least one line: if issues are found list them; if none, write a brief positive summary (e.g. '[✓] All criteria met.'). Never leave this field empty.")},
 		},
 	)
+	if scoreThenFeedback {
+		faInputs := make([]core.InputField, len(signature.Inputs), len(signature.Inputs)+1)
+		copy(faInputs, signature.Inputs)
+		faInputs = append(faInputs, core.InputField{
+			Field: evalField(FieldCriterionScores, "Scores from the score backend; write checklist items only for criteria below max"),
+		})
+		feedbackAnalysisSignature = core.NewSignature(
+			faInputs,
+			feedbackAnalysisSignature.Outputs,
+		)
+		feedbackInstruction += SharedInstructions.ChainedScoreThenFeedbackInterpret
+	}
 	feedbackAnalysisSignature = feedbackAnalysisSignature.WithInstruction(feedbackInstruction)
 	feedbackAnalysisSignature = WithXMLFormatting(feedbackAnalysisSignature)
 	if formatSignature != nil {
@@ -324,11 +339,19 @@ func createChainedEvaluatorModule(
 		signature:              combinedSignature,
 		scoreCriterionIDs:      scoreCriterionIDs,
 		scoreGenerationPrompt:  scoreGenerationPrompt,
+		scoreThenFeedback:      scoreThenFeedback,
 	}, nil
 }
 
-// Process runs feedback analysis then score generation.
+// Process runs feedback analysis then score generation, or score then feedback when scoreThenFeedback is set.
 func (c *ChainedEvaluatorModule) Process(ctx context.Context, inputs map[string]interface{}, opts ...core.Option) (map[string]interface{}, error) {
+	if c != nil && c.scoreThenFeedback {
+		return c.processScoreThenFeedback(ctx, inputs, opts...)
+	}
+	return c.processFeedbackThenScore(ctx, inputs, opts...)
+}
+
+func (c *ChainedEvaluatorModule) processFeedbackThenScore(ctx context.Context, inputs map[string]interface{}, opts ...core.Option) (map[string]interface{}, error) {
 	emitEvaluatorStage(ctx, c.name, "analyzing feedback")
 	feedbackResult, err := c.feedbackAnalysisModule.Process(ctx, inputs, opts...)
 	if err != nil {
@@ -384,6 +407,77 @@ func (c *ChainedEvaluatorModule) Process(ctx context.Context, inputs map[string]
 		return nil, fmt.Errorf("score generation missing directives_ack")
 	}
 	combinedAck := analysisAck + "\n\n" + generated.DirectivesAck
+
+	return map[string]interface{}{
+		"feedback":         feedback,
+		"criterion_scores": criterionScores,
+		FieldDirectivesAck: combinedAck,
+	}, nil
+}
+
+func (c *ChainedEvaluatorModule) processScoreThenFeedback(ctx context.Context, inputs map[string]interface{}, opts ...core.Option) (map[string]interface{}, error) {
+	rubric, err := criteria.FormatRubric(criteria.DefaultRegistry(), c.scoreCriterionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("score-then-feedback rubric: %w", err)
+	}
+
+	emitEvaluatorStage(ctx, c.name, "scoring")
+	scoreReq := scoring.ScoreRequest{
+		GeneratorInput:  toAnyMap(inputs[FieldGeneratorInput]),
+		GeneratorOutput: toAnyMap(inputs[FieldGeneratorOutput]),
+		Feedback:        rubric,
+		CriterionIDs:    c.scoreCriterionIDs,
+		ScorePrompt:     c.scoreGenerationPrompt,
+		ModuleOptions:   opts,
+	}
+	generated, err := c.scoreBackend.Generate(ctx, scoreReq, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("score generation failed: %w", err)
+	}
+	if len(generated.CriterionScores) == 0 {
+		return nil, fmt.Errorf("criterion_scores map is empty in score generation result — model must emit one XML child tag per criterion ID with numeric scores")
+	}
+	if generated.DirectivesAck == "" {
+		return nil, fmt.Errorf("score generation missing directives_ack")
+	}
+
+	criterionScores := make(map[string]interface{}, len(generated.CriterionScores))
+	for k, v := range generated.CriterionScores {
+		criterionScores[k] = v
+	}
+
+	faInputs := make(map[string]interface{}, len(inputs)+1)
+	for k, v := range inputs {
+		faInputs[k] = v
+	}
+	faInputs[FieldCriterionScores] = criterionScores
+
+	emitEvaluatorStage(ctx, c.name, "analyzing feedback")
+	feedbackResult, err := c.feedbackAnalysisModule.Process(ctx, faInputs, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("feedback analysis failed: %w", err)
+	}
+	if len(feedbackResult) == 0 {
+		return nil, fmt.Errorf("feedback analysis returned empty result")
+	}
+
+	feedbackValue, exists := feedbackResult["feedback"]
+	if !exists {
+		return nil, fmt.Errorf("feedback field is missing in feedback analysis result")
+	}
+	feedback, ok := feedbackValue.(string)
+	if !ok {
+		return nil, fmt.Errorf("feedback field is not a string (type: %T, value: %v)", feedbackValue, feedbackValue)
+	}
+	if feedback == "" {
+		return nil, fmt.Errorf("feedback field is empty in feedback analysis result - evaluator should always provide feedback (even if just a positive affirmation)")
+	}
+
+	analysisAck, err := ExtractRequiredReasoningField(feedbackResult)
+	if err != nil {
+		return nil, fmt.Errorf("feedback analysis missing directives_ack: %w", err)
+	}
+	combinedAck := generated.DirectivesAck + "\n\n" + analysisAck
 
 	return map[string]interface{}{
 		"feedback":         feedback,
@@ -481,6 +575,7 @@ func (c *ChainedEvaluatorModule) Clone() core.Module {
 		signature:              c.signature,
 		scoreCriterionIDs:      c.scoreCriterionIDs,
 		scoreGenerationPrompt:  c.scoreGenerationPrompt,
+		scoreThenFeedback:      c.scoreThenFeedback,
 	}
 	if provider, ok := c.scoreBackend.(scoring.ScoreModuleProvider); ok {
 		if scoreModule := provider.ScoreModule(); scoreModule != nil {

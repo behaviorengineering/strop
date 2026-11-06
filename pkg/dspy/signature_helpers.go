@@ -19,6 +19,8 @@ type SharedPromptInstructions struct {
 	ChainedFeedbackAnalysisOutputSplit string
 	// ChainedEvaluatorRationaleCap is appended to both feedback-analysis and score-generation submodules.
 	ChainedEvaluatorRationaleCap string
+	// ChainedScoreThenFeedbackInterpret is appended to feedback analysis when score runs before checklist generation.
+	ChainedScoreThenFeedbackInterpret string
 
 	// Writing style for human-consumed output (generators whose output is read by humans)
 	HumanWriting  string
@@ -126,6 +128,14 @@ TOKEN EFFICIENCY:
 - <directives_ack> must stay short (prefer under ~120 words) — never hundreds of rubric walkthrough items.
 - Never use angle brackets (< or >) inside <directives_ack>; reference fields as plain names only.
 - Put findings and the [✓]/[ ] checklist in <feedback> (or scores in <criterion_scores>), not in <directives_ack>.`,
+
+	ChainedScoreThenFeedbackInterpret: `
+=== SCORE-THEN-FEEDBACK (MANDATORY) ===
+- criterion_scores is already set by the score backend. Do NOT invent new failures or rescore.
+- Write [ ] checklist items ONLY for criteria below their max anchor (typically below 2.0). Quote an exact substring from generator_output for each [ ] item.
+- For criteria at max score, use [✓] or omit them. Do not emit conversational-tone coaching unrelated to a scored zero.
+- If every criterion is at max, output exactly: [✓] All criteria met.
+- <feedback> must never be empty.`,
 
 	LLMWriting: `WRITING STYLE REQUIREMENTS FOR LLM-CONSUMED OUTPUT (CRITICAL):
 
