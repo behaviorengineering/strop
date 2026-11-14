@@ -163,3 +163,129 @@ func TestChainedEvaluatorModule_Process_scoreThenFeedback_order(t *testing.T) {
 	assert.Contains(t, faScoreEvidence, "1.41 / 2.00 -> 1-point band")
 	assert.Contains(t, strings.ToLower(faScoreEvidence), "most instructions followed")
 }
+
+func TestChainedEvaluatorModule_Process_scoreThenFeedback_ranksDingedParentLeaves(t *testing.T) {
+	reg := criteria.DefaultRegistry()
+	reg.Register(criteria.CriterionDescription{
+		ID:        "leaf_a",
+		Name:      "A miss",
+		Scoring:   "2 points: this is the hole.\n1 point: mixed.\n0 points: not this hole.",
+		MaxPoints: 2,
+	})
+	reg.Register(criteria.CriterionDescription{
+		ID:        "leaf_b",
+		Name:      "B miss",
+		Scoring:   "2 points: this is the hole.\n1 point: mixed.\n0 points: not this hole.",
+		MaxPoints: 2,
+	})
+
+	parent := &recordingScoreBackend{
+		result: scoring.ScoreResult{
+			CriterionScores: map[string]float64{"instruction_compliance": 1.41},
+			DirectivesAck:   "jev ack",
+		},
+	}
+	leaves := &recordingScoreBackend{
+		result: scoring.ScoreResult{
+			CriterionScores: map[string]float64{"leaf_a": 1.90, "leaf_b": 0.20},
+			DirectivesAck:   "leaf ack",
+		},
+	}
+	scorePrompt := "CRITERION ID MAPPING\n- Instruction Compliance → \"instruction_compliance\"\n"
+	mod, err := CreateChainedEvaluatorModuleWithScoreBackend(
+		DefaultChainedEvaluatorSignature(),
+		"Test Evaluator",
+		"Interpret scores.",
+		scorePrompt,
+		"",
+		nil,
+		parent,
+		true,
+	)
+	require.NoError(t, err)
+	mod.SetParentLeafRank([]criteria.ParentModifiers{{
+		Parent: criteria.CriterionIDInstructionCompliance,
+		Leaves: []criteria.Modifier{{ID: "leaf_a"}, {ID: "leaf_b"}},
+	}}, leaves)
+
+	var faScoreEvidence string
+	mod.SetInterceptors([]core.ModuleInterceptor{
+		func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo, handler core.ModuleHandler, _ ...core.Option) (map[string]any, error) {
+			if info != nil && strings.Contains(info.ModuleName, "Feedback Analysis") {
+				if ev, ok := inputs[FieldScoreEvidence].(string); ok {
+					faScoreEvidence = ev
+				}
+				return map[string]any{
+					FieldFeedback:      "[ ] instruction_compliance: leaf_a",
+					FieldDirectivesAck: "1. Used top leaf.",
+				}, nil
+			}
+			return handler(ctx, inputs)
+		},
+	})
+
+	_, err = mod.Process(context.Background(), map[string]interface{}{
+		FieldGeneratorInput:  map[string]interface{}{"version": 1},
+		FieldGeneratorOutput: map[string]interface{}{"text": "hello"},
+	})
+	require.NoError(t, err)
+	require.True(t, parent.called)
+	require.True(t, leaves.called)
+	assert.Equal(t, []criteria.CriterionID{"leaf_a", "leaf_b"}, leaves.lastReq.CriterionIDs)
+	require.Contains(t, faScoreEvidence, "LEAF RANK for instruction_compliance")
+	require.Contains(t, faScoreEvidence, "Top leaf is leaf_a")
+	idxA := strings.Index(faScoreEvidence, "leaf_a")
+	idxB := strings.Index(faScoreEvidence, "leaf_b")
+	require.Greater(t, idxB, idxA)
+}
+
+func TestChainedEvaluatorModule_Process_scoreThenFeedback_skipsLeavesAtParentMax(t *testing.T) {
+	parent := &recordingScoreBackend{
+		result: scoring.ScoreResult{
+			CriterionScores: map[string]float64{"instruction_compliance": 2.0},
+			DirectivesAck:   "jev ack",
+		},
+	}
+	leaves := &recordingScoreBackend{
+		result: scoring.ScoreResult{
+			CriterionScores: map[string]float64{"leaf_a": 2.0},
+			DirectivesAck:   "leaf ack",
+		},
+	}
+	scorePrompt := "CRITERION ID MAPPING\n- Instruction Compliance → \"instruction_compliance\"\n"
+	mod, err := CreateChainedEvaluatorModuleWithScoreBackend(
+		DefaultChainedEvaluatorSignature(),
+		"Test Evaluator",
+		"Interpret scores.",
+		scorePrompt,
+		"",
+		nil,
+		parent,
+		true,
+	)
+	require.NoError(t, err)
+	mod.SetParentLeafRank([]criteria.ParentModifiers{{
+		Parent: criteria.CriterionIDInstructionCompliance,
+		Leaves: []criteria.Modifier{{ID: "leaf_a"}},
+	}}, leaves)
+
+	mod.SetInterceptors([]core.ModuleInterceptor{
+		func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo, handler core.ModuleHandler, _ ...core.Option) (map[string]any, error) {
+			if info != nil && strings.Contains(info.ModuleName, "Feedback Analysis") {
+				return map[string]any{
+					FieldFeedback:      "[✓] All criteria met.",
+					FieldDirectivesAck: "1. Parent at max.",
+				}, nil
+			}
+			return handler(ctx, inputs)
+		},
+	})
+
+	_, err = mod.Process(context.Background(), map[string]interface{}{
+		FieldGeneratorInput:  map[string]interface{}{"version": 1},
+		FieldGeneratorOutput: map[string]interface{}{"text": "hello"},
+	})
+	require.NoError(t, err)
+	require.True(t, parent.called)
+	require.False(t, leaves.called)
+}

@@ -1,6 +1,7 @@
 package criteria
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,4 +59,23 @@ func TestParentModifiers_LeafIDsSkipsEmpty(t *testing.T) {
 	}
 	assert.Equal(t, []CriterionID{"leaf_keep"}, mods.LeafIDs())
 	assert.Empty(t, ParentModifiers{}.LeafIDs())
+}
+
+func TestFormatLeafRankEvidence_topLeafFirst(t *testing.T) {
+	t.Parallel()
+	mods := ParentModifiers{
+		Parent: "parent_quality",
+		Leaves: []Modifier{
+			{ID: "leaf_b", Name: "B miss", Description: "B description"},
+			{ID: "leaf_a", Name: "A miss", Description: "A description"},
+		},
+	}
+	ranks := RankLeaves(mods, map[string]float64{"leaf_a": 1.9, "leaf_b": 0.2})
+	got := FormatLeafRankEvidence(NewCriterionRegistry(), mods, ranks)
+	assert.Contains(t, got, "LEAF RANK for parent_quality")
+	assert.Contains(t, got, "Top leaf is leaf_a")
+	idxA := strings.Index(got, "leaf_a")
+	idxB := strings.Index(got, "leaf_b")
+	require.Greater(t, idxA, 0)
+	require.Greater(t, idxB, idxA)
 }

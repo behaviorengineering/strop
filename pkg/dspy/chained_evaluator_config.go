@@ -27,6 +27,10 @@ type ChainedEvaluatorConfig struct {
 	ScoreBackendFactory func(role evaluation.EvaluatorKey, criterionIDs []criteria.CriterionID, scorePrompt string) (scoring.Backend, error)
 	// ScoreThenFeedback runs score generation before feedback analysis (JEV rubric first, then LLM checklist from zeros). Default false.
 	ScoreThenFeedback bool
+	// ParentModifiers are host-owned parent/leaf packs. Ranked only when ScoreThenFeedback is set and the parent is below max.
+	ParentModifiers []criteria.ParentModifiers
+	// LeafScoreBackendFactory builds a score backend for dinged-parent leaves. Nil skips leaf ranking.
+	LeafScoreBackendFactory func() (scoring.Backend, error)
 }
 
 // CreateChainedModulesFromConfig builds a chained evaluator module for each role in config.RolePrompts.
@@ -64,6 +68,13 @@ func CreateChainedModulesFromConfig(
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create chained evaluator for role %q: %w", role, err)
+		}
+		if config.ScoreThenFeedback && len(config.ParentModifiers) > 0 && config.LeafScoreBackendFactory != nil {
+			leafBackend, leafErr := config.LeafScoreBackendFactory()
+			if leafErr != nil {
+				return nil, fmt.Errorf("create leaf score backend for role %q: %w", role, leafErr)
+			}
+			mod.SetParentLeafRank(config.ParentModifiers, leafBackend)
 		}
 		out[role] = mod
 	}
