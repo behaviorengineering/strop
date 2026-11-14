@@ -19,6 +19,8 @@ type SharedPromptInstructions struct {
 	ChainedFeedbackAnalysisOutputSplit string
 	// ChainedEvaluatorRationaleCap is appended to both feedback-analysis and score-generation submodules.
 	ChainedEvaluatorRationaleCap string
+	// ChainedScoreThenFeedbackInterpret is appended to feedback analysis when score runs before checklist generation.
+	ChainedScoreThenFeedbackInterpret string
 
 	// Writing style for human-consumed output (generators whose output is read by humans)
 	HumanWriting  string
@@ -126,6 +128,17 @@ TOKEN EFFICIENCY:
 - <directives_ack> must stay short (prefer under ~120 words) — never hundreds of rubric walkthrough items.
 - Never use angle brackets (< or >) inside <directives_ack>; reference fields as plain names only.
 - Put findings and the [✓]/[ ] checklist in <feedback> (or scores in <criterion_scores>), not in <directives_ack>.`,
+
+	ChainedScoreThenFeedbackInterpret: `
+=== SCORE-THEN-FEEDBACK (MANDATORY) ===
+- criterion_scores is already set by the score backend. Do NOT invent new failures or rescore.
+- score_evidence is the rubric band for each score (lowest first). The band sentence is ours, looked up from the floor anchor. The score backend does not write it. Use that sentence as the why.
+- Explain criteria from lowest score to highest. The lowest ding is the first [ ] item.
+- Write [ ] checklist items ONLY for criteria below their max anchor (typically below 2.0), in that low-to-high order.
+- Quote an exact substring from generator_output that matches the named band. Do not pick a different hole from AUTO-FAIL lists (for example do not write a missing-scene fail when the band is smoothness or a meaning slip).
+- For criteria at max score, use [✓] or omit them. Do not emit conversational-tone coaching unrelated to a scored zero.
+- If every criterion is at max, output exactly: [✓] All criteria met.
+- <feedback> must never be empty.`,
 
 	LLMWriting: `WRITING STYLE REQUIREMENTS FOR LLM-CONSUMED OUTPUT (CRITICAL):
 

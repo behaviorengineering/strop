@@ -21,6 +21,7 @@ const (
 	// Evaluator output fields.
 	FieldScore           = "score"
 	FieldCriterionScores = "criterion_scores"
+	FieldScoreEvidence   = "score_evidence"
 	FieldFeedback        = "feedback"
 	FieldRationale       = "rationale"
 	FieldDirectivesAck   = "directives_ack"
