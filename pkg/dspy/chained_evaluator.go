@@ -3,6 +3,7 @@ package dspy
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	dspymodules "github.com/behaviorengineering/strop/pkg/dspy/modules"
 	"github.com/behaviorengineering/strop/pkg/evaluation/criteria"
@@ -207,6 +208,8 @@ func CreateDefaultConsolidatorModule(roleName string, systemPrompt string, perso
 type ChainedEvaluatorModule struct {
 	feedbackAnalysisModule *dspymodules.DirectivesCoT
 	scoreBackend           scoring.Backend
+	leafScoreBackend       scoring.Backend
+	parentModifiers        []criteria.ParentModifiers
 	name                   string
 	signature              core.Signature
 	scoreCriterionIDs      []criteria.CriterionID
@@ -277,7 +280,7 @@ func createChainedEvaluatorModule(
 				Field: evalField(FieldCriterionScores, "Scores from the score backend; write checklist items only for criteria below max, lowest score first"),
 			},
 			core.InputField{
-				Field: evalField(FieldScoreEvidence, "Rubric band sentence for each score, lowest first; explain that band and quote the draft; do not invent a different hole"),
+				Field: evalField(FieldScoreEvidence, "Rubric bands lowest first, plus LEAF RANK when a parent is dinged; the first leaf is the hole for that parent"),
 			},
 		)
 		feedbackAnalysisSignature = core.NewSignature(
@@ -456,7 +459,15 @@ func (c *ChainedEvaluatorModule) processScoreThenFeedback(ctx context.Context, i
 		faInputs[k] = v
 	}
 	faInputs[FieldCriterionScores] = criterionScores
-	faInputs[FieldScoreEvidence] = criteria.FormatScoreEvidence(criteria.DefaultRegistry(), generated.CriterionScores)
+	scoreEvidence := criteria.FormatScoreEvidence(criteria.DefaultRegistry(), generated.CriterionScores)
+	leafEvidence, rankErr := c.rankDingedParentLeaves(ctx, generated.CriterionScores, scoreReq, opts...)
+	if rankErr != nil {
+		return nil, rankErr
+	}
+	if leafEvidence != "" {
+		scoreEvidence = scoreEvidence + "\n\n" + leafEvidence
+	}
+	faInputs[FieldScoreEvidence] = scoreEvidence
 
 	emitEvaluatorStage(ctx, c.name, "analyzing feedback")
 	feedbackResult, err := c.feedbackAnalysisModule.Process(ctx, faInputs, opts...)
@@ -569,6 +580,71 @@ func (c *ChainedEvaluatorModule) GetScoreBackend() scoring.Backend {
 	return c.scoreBackend
 }
 
+// SetParentLeafRank attaches host-owned parent/leaf packs and the leaf score backend.
+// Rank runs only during score-then-feedback when a parent in the pack is below max.
+func (c *ChainedEvaluatorModule) SetParentLeafRank(mods []criteria.ParentModifiers, leafBackend scoring.Backend) {
+	if c == nil {
+		return
+	}
+	c.parentModifiers = append([]criteria.ParentModifiers(nil), mods...)
+	c.leafScoreBackend = leafBackend
+}
+
+func (c *ChainedEvaluatorModule) rankDingedParentLeaves(
+	ctx context.Context,
+	parentScores map[string]float64,
+	parentReq scoring.ScoreRequest,
+	opts ...core.Option,
+) (string, error) {
+	if c == nil || c.leafScoreBackend == nil || len(c.parentModifiers) == 0 {
+		return "", nil
+	}
+	registry := criteria.DefaultRegistry()
+	var parts []string
+	for _, mods := range c.parentModifiers {
+		if mods.Parent == "" || len(mods.LeafIDs()) == 0 {
+			continue
+		}
+		parentScore, ok := parentScores[string(mods.Parent)]
+		if !ok {
+			continue
+		}
+		parentMax := 2.0
+		if desc, err := registry.Get(mods.Parent); err == nil && desc.MaxPoints > 0 {
+			parentMax = desc.MaxPoints
+		}
+		if !criteria.ShouldRankLeaves(parentScore, parentMax) {
+			continue
+		}
+		leafIDs := mods.LeafIDs()
+		rubric, err := criteria.FormatRubric(registry, leafIDs)
+		if err != nil {
+			return "", fmt.Errorf("score-then-feedback leaf rubric %s: %w", mods.Parent, err)
+		}
+		emitEvaluatorStage(ctx, c.name, "ranking leaves")
+		leafResult, err := c.leafScoreBackend.Generate(ctx, scoring.ScoreRequest{
+			GeneratorInput:  parentReq.GeneratorInput,
+			GeneratorOutput: parentReq.GeneratorOutput,
+			Feedback:        rubric,
+			CriterionIDs:    leafIDs,
+			ScorePrompt:     mods.LeafScorePromptOrDefault(),
+			ModuleOptions:   opts,
+		}, opts...)
+		if err != nil {
+			return "", fmt.Errorf("score-then-feedback leaf rank %s: %w", mods.Parent, err)
+		}
+		if len(leafResult.CriterionScores) == 0 {
+			return "", fmt.Errorf("score-then-feedback leaf rank %s: empty criterion_scores", mods.Parent)
+		}
+		ranks := criteria.RankLeaves(mods, leafResult.CriterionScores)
+		evidence := criteria.FormatLeafRankEvidence(registry, mods, ranks)
+		if evidence != "" {
+			parts = append(parts, evidence)
+		}
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
 // Clone returns a deep copy of the chained module.
 func (c *ChainedEvaluatorModule) Clone() core.Module {
 	clonedFeedback, ok := c.feedbackAnalysisModule.Clone().(*dspymodules.DirectivesCoT)
@@ -577,6 +653,8 @@ func (c *ChainedEvaluatorModule) Clone() core.Module {
 	}
 	cloned := &ChainedEvaluatorModule{
 		feedbackAnalysisModule: clonedFeedback,
+		leafScoreBackend:       c.leafScoreBackend,
+		parentModifiers:        append([]criteria.ParentModifiers(nil), c.parentModifiers...),
 		name:                   c.name,
 		signature:              c.signature,
 		scoreCriterionIDs:      c.scoreCriterionIDs,

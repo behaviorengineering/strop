@@ -133,6 +133,7 @@ TOKEN EFFICIENCY:
 === SCORE-THEN-FEEDBACK (MANDATORY) ===
 - criterion_scores is already set by the score backend. Do NOT invent new failures or rescore.
 - score_evidence is the rubric band for each score (lowest first). The band sentence is ours, looked up from the floor anchor. The score backend does not write it. Use that sentence as the why.
+- If score_evidence includes a LEAF RANK block, the first leaf is the hole for that parent. Write the [ ] item from that leaf. Do not substitute a different 1-point grab-bag miss when a higher leaf is ranked.
 - Explain criteria from lowest score to highest. The lowest ding is the first [ ] item.
 - Write [ ] checklist items ONLY for criteria below their max anchor (typically below 2.0), in that low-to-high order.
 - Quote an exact substring from generator_output that matches the named band. Do not pick a different hole from AUTO-FAIL lists (for example do not write a missing-scene fail when the band is smoothness or a meaning slip).
