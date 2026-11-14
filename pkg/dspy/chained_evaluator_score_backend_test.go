@@ -103,12 +103,15 @@ func TestChainedEvaluatorModule_Process_scoreThenFeedback_order(t *testing.T) {
 	var steps []string
 	stub := &recordingScoreBackend{
 		result: scoring.ScoreResult{
-			CriterionScores: map[string]float64{"instruction_compliance": 0},
-			DirectivesAck:   "jev ack",
+			CriterionScores: map[string]float64{
+				"instruction_compliance": 1.41,
+				"completeness":           1.80,
+			},
+			DirectivesAck: "jev ack",
 		},
 		onCall: func() { steps = append(steps, "score") },
 	}
-	scorePrompt := "CRITERION ID MAPPING\n- Instruction Compliance → \"instruction_compliance\"\n"
+	scorePrompt := "CRITERION ID MAPPING\n- Instruction Compliance → \"instruction_compliance\"\n- Completeness → \"completeness\"\n"
 	mod, err := CreateChainedEvaluatorModuleWithScoreBackend(
 		DefaultChainedEvaluatorSignature(),
 		"Test Evaluator",
@@ -122,6 +125,7 @@ func TestChainedEvaluatorModule_Process_scoreThenFeedback_order(t *testing.T) {
 	require.NoError(t, err)
 
 	var faSawCriterionScores bool
+	var faScoreEvidence string
 
 	mod.SetInterceptors([]core.ModuleInterceptor{
 		func(ctx context.Context, inputs map[string]any, info *core.ModuleInfo, handler core.ModuleHandler, _ ...core.Option) (map[string]any, error) {
@@ -129,6 +133,9 @@ func TestChainedEvaluatorModule_Process_scoreThenFeedback_order(t *testing.T) {
 				steps = append(steps, "feedback")
 				if cs, ok := inputs[FieldCriterionScores]; ok && cs != nil {
 					faSawCriterionScores = true
+				}
+				if ev, ok := inputs[FieldScoreEvidence].(string); ok {
+					faScoreEvidence = ev
 				}
 				return map[string]any{
 					FieldFeedback:      "[ ] [Style Editor] instruction_compliance below max",
@@ -148,5 +155,11 @@ func TestChainedEvaluatorModule_Process_scoreThenFeedback_order(t *testing.T) {
 	require.Equal(t, []string{"score", "feedback"}, steps)
 	require.True(t, faSawCriterionScores)
 	assert.Contains(t, stub.lastReq.Feedback, "=== instruction_compliance ===")
-	assert.Equal(t, 0.0, outs[FieldCriterionScores].(map[string]interface{})["instruction_compliance"])
+	assert.Equal(t, 1.41, outs[FieldCriterionScores].(map[string]interface{})["instruction_compliance"])
+	require.Contains(t, faScoreEvidence, "instruction_compliance")
+	idxLow := strings.Index(faScoreEvidence, "instruction_compliance")
+	idxHigh := strings.Index(faScoreEvidence, "completeness")
+	require.Greater(t, idxHigh, idxLow)
+	assert.Contains(t, faScoreEvidence, "1.41 / 2.00 -> 1-point band")
+	assert.Contains(t, strings.ToLower(faScoreEvidence), "most instructions followed")
 }

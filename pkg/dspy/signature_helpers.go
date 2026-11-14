@@ -132,7 +132,10 @@ TOKEN EFFICIENCY:
 	ChainedScoreThenFeedbackInterpret: `
 === SCORE-THEN-FEEDBACK (MANDATORY) ===
 - criterion_scores is already set by the score backend. Do NOT invent new failures or rescore.
-- Write [ ] checklist items ONLY for criteria below their max anchor (typically below 2.0). Quote an exact substring from generator_output for each [ ] item.
+- score_evidence is the rubric band for each score (lowest first). The band sentence is ours, looked up from the floor anchor. The score backend does not write it. Use that sentence as the why.
+- Explain criteria from lowest score to highest. The lowest ding is the first [ ] item.
+- Write [ ] checklist items ONLY for criteria below their max anchor (typically below 2.0), in that low-to-high order.
+- Quote an exact substring from generator_output that matches the named band. Do not pick a different hole from AUTO-FAIL lists (for example do not write a missing-scene fail when the band is smoothness or a meaning slip).
 - For criteria at max score, use [✓] or omit them. Do not emit conversational-tone coaching unrelated to a scored zero.
 - If every criterion is at max, output exactly: [✓] All criteria met.
 - <feedback> must never be empty.`,

@@ -270,11 +270,16 @@ func createChainedEvaluatorModule(
 		},
 	)
 	if scoreThenFeedback {
-		faInputs := make([]core.InputField, len(signature.Inputs), len(signature.Inputs)+1)
+		faInputs := make([]core.InputField, len(signature.Inputs), len(signature.Inputs)+2)
 		copy(faInputs, signature.Inputs)
-		faInputs = append(faInputs, core.InputField{
-			Field: evalField(FieldCriterionScores, "Scores from the score backend; write checklist items only for criteria below max"),
-		})
+		faInputs = append(faInputs,
+			core.InputField{
+				Field: evalField(FieldCriterionScores, "Scores from the score backend; write checklist items only for criteria below max, lowest score first"),
+			},
+			core.InputField{
+				Field: evalField(FieldScoreEvidence, "Rubric band sentence for each score, lowest first; explain that band and quote the draft; do not invent a different hole"),
+			},
+		)
 		feedbackAnalysisSignature = core.NewSignature(
 			faInputs,
 			feedbackAnalysisSignature.Outputs,
@@ -446,11 +451,12 @@ func (c *ChainedEvaluatorModule) processScoreThenFeedback(ctx context.Context, i
 		criterionScores[k] = v
 	}
 
-	faInputs := make(map[string]interface{}, len(inputs)+1)
+	faInputs := make(map[string]interface{}, len(inputs)+2)
 	for k, v := range inputs {
 		faInputs[k] = v
 	}
 	faInputs[FieldCriterionScores] = criterionScores
+	faInputs[FieldScoreEvidence] = criteria.FormatScoreEvidence(criteria.DefaultRegistry(), generated.CriterionScores)
 
 	emitEvaluatorStage(ctx, c.name, "analyzing feedback")
 	feedbackResult, err := c.feedbackAnalysisModule.Process(ctx, faInputs, opts...)
